@@ -7,17 +7,69 @@ public class CameraController : MonoBehaviour
     public Vector3 offset = new Vector3(0, 3, -6);
     public float smoothSpeed = 10f;
     public float mouseSensitivity = 120f;
+
+    [Header("Zoom Settings")]
     public float distance = 6f;
+    public float minDistance = 2f;
+    public float maxDistance = 12f;
+    public float zoomSpeed = 2f;
+
     public float minY = -20f;
     public float maxY = 60f;
 
     private float yaw;
     private float pitch;
+    private bool cursorLocked = false;
+
+    void Update()
+    {
+        HandleCursorLock();
+        HandleZoom();
+    }
 
     void LateUpdate()
     {
-        HandleRotation();
-        HandlePosition();
+        if (cursorLocked)
+        {
+            HandleRotation();
+            HandlePosition();
+        }
+    }
+
+    void HandleCursorLock()
+    {
+        if (Input.GetMouseButtonDown(0)) // Left click
+        {
+            LockCursor();
+        }
+        else if (Input.GetKeyDown(KeyCode.Escape)) // Esc to release
+        {
+            UnlockCursor();
+        }
+    }
+
+    void LockCursor()
+    {
+        cursorLocked = true;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    void UnlockCursor()
+    {
+        cursorLocked = false;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    void HandleZoom()
+    {
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (Mathf.Abs(scroll) > 0.01f)
+        {
+            distance -= scroll * zoomSpeed;
+            distance = Mathf.Clamp(distance, minDistance, maxDistance);
+        }
     }
 
     void HandleRotation()
