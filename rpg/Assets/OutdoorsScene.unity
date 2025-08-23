@@ -1243,7 +1243,7 @@ MonoBehaviour:
   dashDistance: 10
   dashDuration: 0.3
   dashCooldown: 2
-  invisibilityDuration: 0.5
+  invisibilityDuration: 0.34
   dashCurve:
     serializedVersion: 2
     m_Curve:

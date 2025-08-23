@@ -15,6 +15,8 @@ public class PlayerController : MonoBehaviour
     public float dashDuration = 0.3f;
     public float dashCooldown = 2f;
     public float invisibilityDuration = 0.5f; // How long to stay invisible during dash
+    public float verticalDashHeight = 8f; // Height for vertical dash
+    public bool allowAirDash = true; // Can dash once in mid-air
     public AnimationCurve dashCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
     [Header("References")]
@@ -32,9 +34,11 @@ public class PlayerController : MonoBehaviour
     // Dash variables
     private bool isDashing = false;
     private bool canDash = true;
+    private bool hasUsedAirDash = false; // Track if air dash was used
     private Vector3 dashDirection;
     private float dashTimer = 0f;
     private Vector3 dashStartPosition;
+    private bool isVerticalDash = false;
 
     // Invisibility variables
     private bool isInvisible = false;
@@ -64,6 +68,12 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        // Reset air dash when grounded
+        if (isGrounded && hasUsedAirDash)
+        {
+            hasUsedAirDash = false;
+        }
+
         HandleDashInput();
 
         if (isDashing)
@@ -88,9 +98,15 @@ public class PlayerController : MonoBehaviour
 
     void HandleDashInput()
     {
-        if (input.DashPressed && canDash && !isDashing && isGrounded)
+        if (input.DashPressed && canDash && !isDashing)
         {
-            StartDash();
+            // Can dash if grounded OR if in air and haven't used air dash yet
+            bool canDashNow = isGrounded || (allowAirDash && !hasUsedAirDash);
+
+            if (canDashNow)
+            {
+                StartDash();
+            }
         }
     }
 
@@ -100,6 +116,13 @@ public class PlayerController : MonoBehaviour
         canDash = false;
         dashTimer = 0f;
         currentState = PlayerState.Dashing;
+        isVerticalDash = false;
+
+        // Mark air dash as used if we're in the air
+        if (!isGrounded)
+        {
+            hasUsedAirDash = true;
+        }
 
         // Determine dash direction
         Vector2 moveInput = input.MoveInput;
@@ -107,14 +130,16 @@ public class PlayerController : MonoBehaviour
 
         if (inputDirection.magnitude >= 0.1f)
         {
-            // Dash in movement direction relative to camera
+            // Dash in movement direction relative to camera (horizontal)
             float targetAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + cameraTransform.eulerAngles.y;
             dashDirection = Quaternion.Euler(0, targetAngle, 0) * Vector3.forward;
         }
         else
         {
-            // Dash forward if no input
-            dashDirection = transform.forward;
+            // No input - vertical dash upward
+            dashDirection = Vector3.up;
+            isVerticalDash = true;
+            Debug.Log("Vertical dash activated!");
         }
 
         dashStartPosition = transform.position;
@@ -136,23 +161,68 @@ public class PlayerController : MonoBehaviour
             // Dash finished
             isDashing = false;
             dashTimer = 0f;
+
+            // Reset velocity properly after dash
+            if (isVerticalDash)
+            {
+                // For vertical dash, set a small downward velocity to start falling immediately
+                velocity.y = -2f;
+            }
+            else
+            {
+                // For horizontal dash, preserve some downward velocity if we were falling
+                if (velocity.y > 0f)
+                {
+                    velocity.y = 0f; // Stop any upward momentum
+                }
+            }
+
+            isVerticalDash = false;
             currentState = PlayerState.Idle;
             return;
         }
 
         // Calculate dash movement using animation curve
         float curveValue = dashCurve.Evaluate(normalizedTime);
-        Vector3 targetPosition = dashStartPosition + dashDirection * dashDistance;
+
+        Vector3 targetPosition;
+        if (isVerticalDash)
+        {
+            // Vertical dash - go upward
+            targetPosition = dashStartPosition + Vector3.up * verticalDashHeight;
+        }
+        else
+        {
+            // Horizontal dash
+            targetPosition = dashStartPosition + dashDirection * dashDistance;
+        }
+
         Vector3 currentTargetPos = Vector3.Lerp(dashStartPosition, targetPosition, curveValue);
 
         // Calculate movement delta
         Vector3 movement = currentTargetPos - transform.position;
 
-        // Apply movement (without gravity during dash)
+        // Apply movement directly through CharacterController
         controller.Move(movement);
 
-        // Reset vertical velocity during dash to prevent gravity buildup
-        velocity.y = 0f;
+        // Control velocity during dash to prevent weird physics interactions
+        if (isVerticalDash)
+        {
+            // During vertical dash, suppress gravity completely
+            velocity.y = 0f;
+        }
+        else
+        {
+            // During horizontal dash, maintain slight downward velocity if in air
+            if (!isGrounded)
+            {
+                velocity.y = Mathf.Max(velocity.y, -5f); // Cap falling speed during dash
+            }
+            else
+            {
+                velocity.y = 0f;
+            }
+        }
     }
 
     IEnumerator HandleInvisibility()
@@ -233,6 +303,9 @@ public class PlayerController : MonoBehaviour
 
     private void HandleGravity()
     {
+        // Don't apply gravity during dash
+        if (isDashing) return;
+
         if (isGrounded && velocity.y < 0)
             velocity.y = -2f; // keeps player grounded
 
@@ -252,6 +325,7 @@ public class PlayerController : MonoBehaviour
     public bool IsInvisible => isInvisible;
     public bool IsDashing => isDashing;
     public bool CanDash => canDash;
+    public bool HasUsedAirDash => hasUsedAirDash;
     public float DashCooldownRemaining => canDash ? 0f : dashCooldown - (Time.time % dashCooldown);
 }
 
