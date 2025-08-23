@@ -1244,6 +1244,8 @@ MonoBehaviour:
   dashDuration: 0.3
   dashCooldown: 2
   invisibilityDuration: 0.34
+  verticalDashHeight: 8
+  allowAirDash: 1
   dashCurve:
     serializedVersion: 2
     m_Curve:
@@ -1444,6 +1446,85 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 8
   enemyTag: Enemy
+  battleModeToggleKey: 120
+  battleModeTransitionTime: 1
+  battleModeTransitionCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  entryRiseHeight: 2.98
+  entryRiseSpeed: 8
+  entryPauseTime: 0.5
+  duplicationTime: 1
+  spreadToPositionTime: 1.5
+  entryRiseCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   playerCamera: {fileID: 1823688466}
   shootOrigin: {fileID: 0}
   cameraController: {fileID: 1823688469}
