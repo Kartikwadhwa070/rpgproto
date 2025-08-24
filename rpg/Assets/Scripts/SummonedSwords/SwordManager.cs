@@ -31,10 +31,12 @@ public class FloatingSwordSystem : MonoBehaviour
     private SwordEntryManager entryManager;
     private SwordShootingSystem shootingSystem;
 
-    // Public properties
+    // Public properties for other components to access
     public bool IsBattleMode => isBattleMode;
     public bool IsPerformingEntry => isPerformingEntry;
     public List<SwordController> Swords => swords;
+    public float FloatDistance => floatDistance;
+    public float FloatHeight => floatHeight;
 
     void Start()
     {
