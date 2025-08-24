@@ -477,7 +477,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &432432460
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -684,6 +684,50 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 5.05, y: 5.05, z: 5.05}
   m_ConstrainProportionsScale: 1
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &950412222
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 950412224}
+  - component: {fileID: 950412223}
+  m_Layer: 0
+  m_Name: Force60
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &950412223
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 950412222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e82ec0c598a36743a6d6fe3b97c60a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &950412224
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 950412222}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 3.766586, y: 4.179589, z: -4.730423}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -1177,7 +1221,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 1887218736}
   offset: {x: 0, y: 0.6, z: -6}
-  smoothSpeed: 115.43
+  smoothSpeed: 408.7
   mouseSensitivity: 120
   distance: 3.14
   minDistance: 2
@@ -1242,7 +1286,7 @@ MonoBehaviour:
   gravity: -9.81
   dashDistance: 10
   dashDuration: 0.3
-  dashCooldown: 2
+  dashCooldown: 0.34
   invisibilityDuration: 0.34
   verticalDashHeight: 8
   allowAirDash: 1
@@ -1432,7 +1476,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   swordPrefab: {fileID: 5031791142147271447, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
   swordCount: 6
-  floatDistance: 2
+  floatDistance: 1.51
   floatHeight: 0.5
   rotationSpeed: 30
   bobSpeed: 2
@@ -1651,3 +1695,4 @@ SceneRoots:
   - {fileID: 1757945025}
   - {fileID: 32992282}
   - {fileID: 898004545}
+  - {fileID: 950412224}
