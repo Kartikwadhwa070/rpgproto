@@ -17,9 +17,12 @@ public class SwordComboSystem : MonoBehaviour
 
     public void Initialize(MeleeSwordSystem system, float timeWindow)
     {
+        Debug.Log("[SwordComboSystem] Initializing...");
         swordSystem = system;
         comboTimeWindow = timeWindow;
+
         SetupComboAttacks();
+        Debug.Log($"[SwordComboSystem] Initialized with {comboAttacks.Length} combo attacks and time window: {comboTimeWindow}");
     }
 
     void SetupComboAttacks()
@@ -67,17 +70,25 @@ public class SwordComboSystem : MonoBehaviour
 
     public int GetNextComboAttack()
     {
+        Debug.Log($"[SwordComboSystem] GetNextComboAttack - Current combo index: {currentComboIndex}");
+        Debug.Log($"[SwordComboSystem] Time since last attack: {Time.time - lastAttackTime}, Window: {comboTimeWindow}");
+
         // If too much time has passed since last attack, reset combo
         if (Time.time - lastAttackTime > comboTimeWindow && currentComboIndex > 0)
         {
+            Debug.Log("[SwordComboSystem] Combo timed out, resetting");
             ResetCombo();
         }
 
         int attackIndex = currentComboIndex;
+        string attackName = GetComboAttackName(attackIndex);
 
         // Advance combo
         currentComboIndex = (currentComboIndex + 1) % comboAttacks.Length;
         lastAttackTime = Time.time;
+
+        Debug.Log($"[SwordComboSystem] Performing attack: {attackName} (index {attackIndex})");
+        Debug.Log($"[SwordComboSystem] Next combo index will be: {currentComboIndex}");
 
         // Set up combo reset timer
         StartComboResetTimer();
@@ -86,10 +97,12 @@ public class SwordComboSystem : MonoBehaviour
         if (currentComboIndex == 0) // We wrapped around
         {
             isWaitingForNextAttack = false;
+            Debug.Log("[SwordComboSystem] This was the final attack in combo");
         }
         else
         {
             isWaitingForNextAttack = true;
+            Debug.Log("[SwordComboSystem] Waiting for next attack in combo");
         }
 
         return attackIndex;
