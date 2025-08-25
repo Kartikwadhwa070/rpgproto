@@ -10,17 +10,27 @@ public class FloatingSwordSystem : MonoBehaviour
     public float floatDistance = 2f;
     public float floatHeight = 0.5f;
 
+    [Header("Sword Orientation")]
+    [Range(-90f, 90f)]
+    public float swordPitchAngle = 0f; // Up/down tilt of swords
+    [Range(0f, 360f)]
+    public float swordYawOffset = 0f; // Additional rotation around Y axis
+    [Range(-45f, 45f)]
+    public float swordRollAngle = 0f; // Banking angle of swords
+    public bool pointSwordsOutward = true; // Point sharp end away from player
+    public bool alignWithMovement = false; // Align swords with orbital movement
+
     [Header("Visual Settings")]
     public float rotationSpeed = 30f;
     public float bobSpeed = 2f;
     public float bobAmount = 0.2f;
-    public float shootRotationSpeed = 180f; // Rotation speed during flight
+    public float shootRotationSpeed = 180f;
 
     [Header("Shooting Settings")]
     public float shootSpeed = 20f;
     public float shootRange = 100f;
     public float swordReturnDelay = 3f;
-    public float shootTiltAngle = 45f; // Angle to tilt sword forward when shooting
+    public float shootTiltAngle = 45f;
     public LayerMask enemyLayer = -1;
     public string enemyTag = "Enemy";
 
@@ -29,12 +39,41 @@ public class FloatingSwordSystem : MonoBehaviour
     public float battleModeTransitionTime = 1f;
     public AnimationCurve battleModeTransitionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
-    [Header("Dramatic Entry Settings")]
-    public float entryRiseHeight = 5f; // How high above player to rise
-    public float entryRiseSpeed = 8f; // Speed of initial rise
-    public float entryPauseTime = 0.5f; // Pause time at peak before duplication
-    public float duplicationTime = 1f; // Time for duplication effect
-    public float spreadToPositionTime = 1.5f; // Time to spread to final positions
+    [Header("Magic Circle")]
+    public GameObject magicCirclePrefab; // Assign your magic circle model here
+    public float circleHeight = 3f; // Height above player
+    public float circleScale = 1f; // Scale of the magic circle
+    public float circleSpinSpeed = 45f; // Rotation speed of the circle
+    public bool reverseCircleRotation = false;
+    public AnimationCurve circleFadeCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    public float circleGlowIntensity = 2f; // For emissive materials
+
+    [Header("Enhanced Entry Animation")]
+    public float entryRiseHeight = 5f;
+    public float entryRiseSpeed = 8f;
+    public float entryPauseTime = 0.8f;
+    public float duplicationTime = 2f;
+    public float spreadToPositionTime = 2f;
+    
+    [Header("Entry Effects")]
+    public float swordSpinDuringEntry = 720f; // Degrees to spin during entry
+    public float swordGlowDuringEntry = 3f; // Glow intensity during entry
+    public AnimationCurve entrySpinCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    public AnimationCurve entryGlowCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    
+    [Header("Spiral Entry Pattern")]
+    public bool useSpiralEntry = true;
+    public float spiralRadius = 1f;
+    public float spiralSpeed = 2f;
+    public int spiralTurns = 3;
+    
+    [Header("Exit Effects")]
+    public bool useVortexExit = true;
+    public float vortexSpinSpeed = 360f;
+    public float vortexPullSpeed = 5f;
+    public AnimationCurve vortexCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+
+    [Header("Animation Curves")]
     public AnimationCurve entryRiseCurve = new AnimationCurve(new Keyframe(0, 0), new Keyframe(1, 1));
     public AnimationCurve spreadCurve = new AnimationCurve(new Keyframe(0, 0), new Keyframe(1, 1));
 
@@ -44,11 +83,13 @@ public class FloatingSwordSystem : MonoBehaviour
     public CameraController cameraController;
 
     private List<SwordController> swords = new List<SwordController>();
+    private GameObject magicCircleInstance;
     private float rotationAngle = 0f;
     private bool isBattleMode = false;
     private bool isTransitioning = false;
     private float transitionTimer = 0f;
     private bool isPerformingDramaticEntry = false;
+    private MagicCircleController circleController;
 
     void Start()
     {
@@ -62,9 +103,7 @@ public class FloatingSwordSystem : MonoBehaviour
             cameraController = playerCamera.GetComponent<CameraController>();
 
         CreateSwords();
-
-        // Start in non-battle mode (swords hidden)
-        SetBattleMode(false, true); // immediate = true for initial state
+        SetBattleMode(false, true);
     }
 
     void Update()
@@ -76,20 +115,19 @@ public class FloatingSwordSystem : MonoBehaviour
             UpdateSwordPositions();
         }
         HandleInput();
+        UpdateMagicCircle();
     }
 
     void CreateSwords()
     {
-        // Start with empty list - swords will be created when needed
         swords.Clear();
     }
 
     void CreateAllSwords()
     {
-        // Only create swords if we don't have the full count
         if (swords.Count >= swordCount) return;
 
-        // Clear existing swords first
+        // Clear existing swords
         for (int i = 0; i < swords.Count; i++)
         {
             if (swords[i] != null && swords[i].gameObject != null)
@@ -99,8 +137,23 @@ public class FloatingSwordSystem : MonoBehaviour
         }
         swords.Clear();
 
-        // Create all swords at a position above the player to avoid physics conflicts
-        Vector3 spawnPosition = transform.position + Vector3.up * (entryRiseHeight + 2f);
+        // Create magic circle if prefab is assigned
+        if (magicCirclePrefab != null && magicCircleInstance == null)
+        {
+            Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
+            magicCircleInstance = Instantiate(magicCirclePrefab, circlePosition, Quaternion.identity);
+            magicCircleInstance.transform.localScale = Vector3.one * circleScale;
+            
+            circleController = magicCircleInstance.GetComponent<MagicCircleController>();
+            if (circleController == null)
+                circleController = magicCircleInstance.AddComponent<MagicCircleController>();
+            
+            circleController.Initialize(circleGlowIntensity);
+            circleController.SetVisibility(0f); // Start invisible
+        }
+
+        // Create swords at magic circle position
+        Vector3 spawnPosition = transform.position + Vector3.up * circleHeight;
 
         for (int i = 0; i < swordCount; i++)
         {
@@ -112,6 +165,24 @@ public class FloatingSwordSystem : MonoBehaviour
 
             sword.Initialize(this, i);
             swords.Add(sword);
+        }
+    }
+
+    void UpdateMagicCircle()
+    {
+        if (magicCircleInstance != null && isBattleMode)
+        {
+            // Keep circle above player
+            Vector3 targetPosition = transform.position + Vector3.up * circleHeight;
+            magicCircleInstance.transform.position = Vector3.Lerp(
+                magicCircleInstance.transform.position, 
+                targetPosition, 
+                Time.deltaTime * 5f
+            );
+
+            // Rotate the circle
+            float spinDirection = reverseCircleRotation ? -1f : 1f;
+            magicCircleInstance.transform.Rotate(Vector3.up, circleSpinSpeed * spinDirection * Time.deltaTime);
         }
     }
 
@@ -137,10 +208,8 @@ public class FloatingSwordSystem : MonoBehaviour
 
         if (immediate)
         {
-            // Instant transition
             if (enabled)
             {
-                // Create all swords if they don't exist
                 CreateAllSwords();
                 foreach (SwordController sword in swords)
                 {
@@ -160,67 +229,77 @@ public class FloatingSwordSystem : MonoBehaviour
         {
             if (enabled)
             {
-                // Entering battle mode - perform dramatic entry
                 CreateAllSwords();
-                StartCoroutine(PerformDramaticEntry());
+                StartCoroutine(PerformEnhancedDramaticEntry());
             }
             else
             {
-                // Exiting battle mode - perform dramatic exit
-                StartCoroutine(PerformDramaticExit());
+                StartCoroutine(PerformEnhancedDramaticExit());
             }
         }
     }
 
-    IEnumerator PerformDramaticEntry()
+    IEnumerator PerformEnhancedDramaticEntry()
     {
         isPerformingDramaticEntry = true;
 
-        // Start all swords well above the player to avoid physics conflicts
-        Vector3 startPos = transform.position + Vector3.up * (entryRiseHeight + 2f);
-        Vector3 riseTarget = transform.position + Vector3.up * entryRiseHeight;
+        Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
 
-        // Initialize all swords at the high starting position (invisible initially)
+        // Phase 0: Fade in magic circle with dramatic effect
+        if (circleController != null)
+        {
+            float circleFadeTime = 1f;
+            float timer = 0f;
+            
+            while (timer < circleFadeTime)
+            {
+                timer += Time.deltaTime;
+                float normalizedTime = timer / circleFadeTime;
+                float curveValue = circleFadeCurve.Evaluate(normalizedTime);
+                
+                circleController.SetVisibility(curveValue);
+                circleController.SetGlowIntensity(circleGlowIntensity * curveValue);
+                
+                yield return null;
+            }
+            
+            circleController.SetVisibility(1f);
+        }
+
+        // Initialize all swords at circle position (invisible)
         for (int i = 0; i < swords.Count; i++)
         {
             swords[i].SetBattleMode(true, 0f);
-            swords[i].SetEntryPosition(startPos);
+            swords[i].SetEntryPosition(circlePosition);
+            swords[i].SetEntryGlow(0f);
         }
 
-        // Phase 1: Make first sword visible and descend to rise height
+        yield return new WaitForSeconds(0.5f);
+
+        // Phase 1: Summon first sword with dramatic effect
         swords[0].SetBattleMode(true, 1f);
+        swords[0].SetEntryGlow(swordGlowDuringEntry);
 
-        float descendTimer = 0f;
-        float descendDuration = 2f / entryRiseSpeed; // Time to descend from high position to rise target
+        // Spin the first sword as it appears
+        float spinTimer = 0f;
+        float spinDuration = 1f;
+        Quaternion initialRotation = swords[0].transform.rotation;
 
-        while (descendTimer < descendDuration)
+        while (spinTimer < spinDuration)
         {
-            descendTimer += Time.deltaTime;
-            float normalizedTime = descendTimer / descendDuration;
-            float curveValue = entryRiseCurve.Evaluate(normalizedTime);
-
-            Vector3 currentPos = Vector3.Lerp(startPos, riseTarget, curveValue);
-
-            // Move all swords to this position (only first is visible)
-            for (int i = 0; i < swords.Count; i++)
-            {
-                swords[i].SetEntryPosition(currentPos);
-            }
-
+            spinTimer += Time.deltaTime;
+            float normalizedTime = spinTimer / spinDuration;
+            float spinAmount = entrySpinCurve.Evaluate(normalizedTime) * swordSpinDuringEntry;
+            
+            Quaternion spinRotation = Quaternion.AngleAxis(spinAmount, Vector3.up);
+            swords[0].transform.rotation = initialRotation * spinRotation;
+            
             yield return null;
         }
 
-        // Ensure all swords are at the rise target position
-        for (int i = 0; i < swords.Count; i++)
-        {
-            swords[i].SetEntryPosition(riseTarget);
-        }
-
-        // Phase 2: Pause at peak
         yield return new WaitForSeconds(entryPauseTime);
 
-        // Phase 3: Duplication effect (fade in the other swords)
-        Vector3 peakPosition = riseTarget;
+        // Phase 2: Enhanced duplication with spiral pattern
         float duplicationTimer = 0f;
 
         while (duplicationTimer < duplicationTime)
@@ -230,15 +309,32 @@ public class FloatingSwordSystem : MonoBehaviour
 
             for (int i = 1; i < swords.Count; i++)
             {
-                // Stagger the appearance of each sword
-                float swordDelay = (float)(i - 1) / (swordCount - 1) * 0.5f;
-                float swordTime = Mathf.Clamp01((normalizedTime - swordDelay) * 2f); // Speed up individual appearances
+                // Stagger each sword's appearance
+                float swordDelay = (float)(i - 1) / (swordCount - 1) * 0.7f;
+                float swordTime = Mathf.Clamp01((normalizedTime - swordDelay) * 1.5f);
 
-                swords[i].SetBattleMode(true, swordTime);
+                if (swordTime > 0)
+                {
+                    swords[i].SetBattleMode(true, swordTime);
+                    swords[i].SetEntryGlow(swordGlowDuringEntry * swordTime);
 
-                // Add a slight position offset during duplication for effect
-                Vector3 offset = Vector3.up * Mathf.Sin(normalizedTime * Mathf.PI * 3) * 0.1f;
-                swords[i].SetEntryPosition(peakPosition + offset);
+                    // Spiral effect during duplication
+                    if (useSpiralEntry)
+                    {
+                        float spiralAngle = swordTime * spiralTurns * 360f + (i * 60f);
+                        Vector3 spiralOffset = new Vector3(
+                            Mathf.Cos(spiralAngle * Mathf.Deg2Rad) * spiralRadius * (1f - swordTime),
+                            Mathf.Sin(swordTime * Mathf.PI * spiralSpeed) * 0.3f,
+                            Mathf.Sin(spiralAngle * Mathf.Deg2Rad) * spiralRadius * (1f - swordTime)
+                        );
+                        swords[i].SetEntryPosition(circlePosition + spiralOffset);
+                    }
+
+                    // Spin during entry
+                    float spinAmount = entrySpinCurve.Evaluate(swordTime) * swordSpinDuringEntry * 2f;
+                    Quaternion entrySpinRotation = Quaternion.AngleAxis(spinAmount + (i * 45f), Vector3.up);
+                    swords[i].SetEntryRotation(entrySpinRotation);
+                }
             }
 
             yield return null;
@@ -248,10 +344,13 @@ public class FloatingSwordSystem : MonoBehaviour
         for (int i = 0; i < swords.Count; i++)
         {
             swords[i].SetBattleMode(true, 1f);
-            swords[i].SetEntryPosition(peakPosition);
+            swords[i].SetEntryPosition(circlePosition);
+            swords[i].SetEntryGlow(swordGlowDuringEntry);
         }
 
-        // Phase 4: Spread to final positions
+        yield return new WaitForSeconds(0.5f);
+
+        // Phase 3: Dramatic spread to final positions
         float spreadTimer = 0f;
 
         while (spreadTimer < spreadToPositionTime)
@@ -260,9 +359,9 @@ public class FloatingSwordSystem : MonoBehaviour
             float normalizedTime = spreadTimer / spreadToPositionTime;
             float curveValue = spreadCurve.Evaluate(normalizedTime);
 
-            // Calculate final positions for each sword
             for (int i = 0; i < swords.Count; i++)
             {
+                // Calculate final position and rotation
                 float angle = (360f / swordCount) * i;
                 Vector3 finalOffset = new Vector3(
                     Mathf.Cos(angle * Mathf.Deg2Rad) * floatDistance,
@@ -270,73 +369,101 @@ public class FloatingSwordSystem : MonoBehaviour
                     Mathf.Sin(angle * Mathf.Deg2Rad) * floatDistance
                 );
                 Vector3 finalPosition = transform.position + finalOffset;
+                Quaternion finalRotation = CalculateSwordRotation(finalOffset, angle);
 
-                // Interpolate from peak position to final position
-                Vector3 currentPos = Vector3.Lerp(peakPosition, finalPosition, curveValue);
+                // Interpolate positions
+                Vector3 currentPos = Vector3.Lerp(circlePosition, finalPosition, curveValue);
                 swords[i].SetEntryPosition(currentPos);
+                swords[i].SetEntryRotation(Quaternion.Lerp(swords[i].transform.rotation, finalRotation, curveValue));
 
-                // Also set rotation
-                Quaternion finalRotation = Quaternion.LookRotation(finalOffset.normalized);
-                swords[i].SetEntryRotation(finalRotation);
+                // Reduce glow as they spread out
+                float glowReduction = Mathf.Lerp(swordGlowDuringEntry, 0f, curveValue);
+                swords[i].SetEntryGlow(glowReduction);
             }
 
             yield return null;
         }
 
-        // Phase 5: Switch to normal floating mode
+        // Phase 4: Switch to normal floating mode
         foreach (SwordController sword in swords)
         {
             sword.SetFloatingMode(true);
+            sword.SetEntryGlow(0f); // Remove entry glow
         }
 
         isPerformingDramaticEntry = false;
         isBattleMode = true;
     }
 
-    IEnumerator PerformDramaticExit()
+    IEnumerator PerformEnhancedDramaticExit()
     {
         isPerformingDramaticEntry = true;
         isBattleMode = false;
 
-        // Phase 1: Gather to center position above player
-        Vector3 gatherTarget = transform.position + Vector3.up * entryRiseHeight;
-        float gatherTimer = 0f;
+        Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
 
         // Switch all swords to entry mode
         foreach (SwordController sword in swords)
         {
             sword.SetFloatingMode(false);
+            sword.SetEntryGlow(swordGlowDuringEntry * 0.5f); // Add some glow for dramatic effect
         }
 
+        // Phase 1: Vortex gather effect
+        float gatherTimer = 0f;
+        
         while (gatherTimer < spreadToPositionTime)
         {
             gatherTimer += Time.deltaTime;
             float normalizedTime = gatherTimer / spreadToPositionTime;
-            float curveValue = spreadCurve.Evaluate(1f - normalizedTime); // Reverse the curve
+            float curveValue = useVortexExit ? vortexCurve.Evaluate(normalizedTime) : (1f - normalizedTime);
 
-            // Move all swords from their current positions to the gather point
             for (int i = 0; i < swords.Count; i++)
             {
-                float angle = (360f / swordCount) * i + rotationAngle;
+                // Current floating position
+                float currentAngle = (360f / swordCount) * i + rotationAngle;
                 Vector3 currentFloatOffset = new Vector3(
-                    Mathf.Cos(angle * Mathf.Deg2Rad) * floatDistance,
+                    Mathf.Cos(currentAngle * Mathf.Deg2Rad) * floatDistance,
                     floatHeight,
-                    Mathf.Sin(angle * Mathf.Deg2Rad) * floatDistance
+                    Mathf.Sin(currentAngle * Mathf.Deg2Rad) * floatDistance
                 );
                 Vector3 currentFloatPosition = transform.position + currentFloatOffset;
 
-                // Interpolate from current floating position to gather target
-                Vector3 currentPos = Vector3.Lerp(currentFloatPosition, gatherTarget, 1f - curveValue);
-                swords[i].SetEntryPosition(currentPos);
+                if (useVortexExit)
+                {
+                    // Vortex effect - spiral inward
+                    float vortexRadius = floatDistance * (1f - curveValue);
+                    float vortexAngle = currentAngle + (curveValue * vortexSpinSpeed * 3f);
+                    Vector3 vortexOffset = new Vector3(
+                        Mathf.Cos(vortexAngle * Mathf.Deg2Rad) * vortexRadius,
+                        floatHeight + (curveValue * (circleHeight - floatHeight)),
+                        Mathf.Sin(vortexAngle * Mathf.Deg2Rad) * vortexRadius
+                    );
+                    Vector3 vortexPosition = transform.position + vortexOffset;
+                    swords[i].SetEntryPosition(vortexPosition);
+                    
+                    // Spin swords during vortex
+                    Quaternion vortexRotation = Quaternion.AngleAxis(curveValue * 720f, Vector3.up);
+                    swords[i].SetEntryRotation(vortexRotation);
+                }
+                else
+                {
+                    // Simple gather
+                    Vector3 currentPos = Vector3.Lerp(currentFloatPosition, circlePosition, curveValue);
+                    swords[i].SetEntryPosition(currentPos);
+                }
+
+                // Increase glow as they gather
+                float gatherGlow = Mathf.Lerp(0f, swordGlowDuringEntry, curveValue);
+                swords[i].SetEntryGlow(gatherGlow);
             }
 
             yield return null;
         }
 
-        // Phase 2: Pause at peak
         yield return new WaitForSeconds(entryPauseTime);
 
-        // Phase 3: Fade out all swords except the first (reverse duplication)
+        // Phase 2: Reverse duplication - fade out with effects
         float fadeTimer = 0f;
 
         while (fadeTimer < duplicationTime)
@@ -344,54 +471,73 @@ public class FloatingSwordSystem : MonoBehaviour
             fadeTimer += Time.deltaTime;
             float normalizedTime = fadeTimer / duplicationTime;
 
-            for (int i = swords.Count - 1; i >= 1; i--) // Reverse order for fade out
+            for (int i = swords.Count - 1; i >= 1; i--)
             {
-                // Stagger the disappearance of each sword
                 float swordDelay = (float)(swords.Count - 1 - i) / (swordCount - 1) * 0.5f;
                 float swordTime = Mathf.Clamp01((normalizedTime - swordDelay) * 2f);
                 float visibility = 1f - swordTime;
 
                 swords[i].SetBattleMode(false, visibility);
 
-                // Add slight movement during fade
-                Vector3 offset = Vector3.up * Mathf.Sin((1f - normalizedTime) * Mathf.PI * 3) * 0.1f;
-                swords[i].SetEntryPosition(gatherTarget + offset);
+                // Spin and rise effect during fade
+                Vector3 fadeOffset = Vector3.up * (swordTime * 2f);
+                float fadeSpinAngle = swordTime * 360f * 2f;
+                Quaternion fadeSpinRotation = Quaternion.AngleAxis(fadeSpinAngle, Vector3.up);
+                
+                swords[i].SetEntryPosition(circlePosition + fadeOffset);
+                swords[i].SetEntryRotation(fadeSpinRotation);
+                swords[i].SetEntryGlow(swordGlowDuringEntry * (1f - swordTime));
             }
 
             yield return null;
         }
 
-        // Phase 4: Rise the remaining sword up and away before fading
-        Vector3 finalExitPosition = transform.position + Vector3.up * (entryRiseHeight + 2f);
-        float riseTimer = 0f;
-        float riseDuration = 2f / entryRiseSpeed;
+        // Phase 3: Final sword dramatic exit
+        Vector3 finalExitPosition = circlePosition + Vector3.up * 3f;
+        float finalTimer = 0f;
+        float finalDuration = 1.5f;
 
-        while (riseTimer < riseDuration)
+        while (finalTimer < finalDuration)
         {
-            riseTimer += Time.deltaTime;
-            float normalizedTime = riseTimer / riseDuration;
+            finalTimer += Time.deltaTime;
+            float normalizedTime = finalTimer / finalDuration;
             float curveValue = entryRiseCurve.Evaluate(normalizedTime);
 
-            Vector3 currentPos = Vector3.Lerp(gatherTarget, finalExitPosition, curveValue);
+            Vector3 currentPos = Vector3.Lerp(circlePosition, finalExitPosition, curveValue);
             swords[0].SetEntryPosition(currentPos);
 
+            // Final dramatic spin
+            Quaternion finalSpin = Quaternion.AngleAxis(curveValue * 1080f, Vector3.up);
+            swords[0].SetEntryRotation(finalSpin);
+
+            // Fade visibility and glow
+            float finalVisibility = 1f - curveValue;
+            swords[0].SetBattleMode(false, finalVisibility);
+            swords[0].SetEntryGlow(swordGlowDuringEntry * finalVisibility);
+
             yield return null;
         }
 
-        // Phase 5: Fade out the last sword and clean up
-        float finalFadeTimer = 0f;
-        float finalFadeDuration = 0.5f;
-
-        while (finalFadeTimer < finalFadeDuration)
+        // Phase 4: Fade out magic circle
+        if (circleController != null)
         {
-            finalFadeTimer += Time.deltaTime;
-            float visibility = 1f - (finalFadeTimer / finalFadeDuration);
-            swords[0].SetBattleMode(false, visibility);
-
-            yield return null;
+            float circleFadeTime = 0.8f;
+            float timer = 0f;
+            
+            while (timer < circleFadeTime)
+            {
+                timer += Time.deltaTime;
+                float normalizedTime = timer / circleFadeTime;
+                float visibility = 1f - normalizedTime;
+                
+                circleController.SetVisibility(visibility);
+                circleController.SetGlowIntensity(circleGlowIntensity * visibility);
+                
+                yield return null;
+            }
         }
 
-        // Clean up - destroy all sword objects
+        // Clean up
         for (int i = 0; i < swords.Count; i++)
         {
             if (swords[i] != null && swords[i].gameObject != null)
@@ -401,43 +547,23 @@ public class FloatingSwordSystem : MonoBehaviour
         }
         swords.Clear();
 
+        if (magicCircleInstance != null)
+        {
+            Destroy(magicCircleInstance);
+            magicCircleInstance = null;
+            circleController = null;
+        }
+
         isPerformingDramaticEntry = false;
-    }
-
-    IEnumerator TransitionToMode()
-    {
-        while (transitionTimer < battleModeTransitionTime)
-        {
-            transitionTimer += Time.deltaTime;
-            float normalizedTime = transitionTimer / battleModeTransitionTime;
-            float curveValue = battleModeTransitionCurve.Evaluate(normalizedTime);
-
-            foreach (SwordController sword in swords)
-            {
-                float visibility = isBattleMode ? curveValue : (1f - curveValue);
-                sword.SetBattleMode(isBattleMode, visibility);
-            }
-
-            yield return null;
-        }
-
-        // Ensure final state
-        foreach (SwordController sword in swords)
-        {
-            sword.SetBattleMode(isBattleMode, isBattleMode ? 1f : 0f);
-        }
-
-        isTransitioning = false;
     }
 
     void HandleTransition()
     {
-        // This is handled by the coroutines, but we keep it for potential future use
+        // Handled by coroutines
     }
 
     void UpdateSwordPositions()
     {
-        // Only update positions if in battle mode or transitioning
         if (!isBattleMode && !isTransitioning) return;
 
         rotationAngle += rotationSpeed * Time.deltaTime;
@@ -454,19 +580,45 @@ public class FloatingSwordSystem : MonoBehaviour
                 );
 
                 swords[i].SetFloatingPosition(transform.position + offset);
-                swords[i].SetFloatingRotation(Quaternion.LookRotation(offset.normalized));
+                swords[i].SetFloatingRotation(CalculateSwordRotation(offset, angle));
             }
         }
     }
 
+    Quaternion CalculateSwordRotation(Vector3 offset, float orbitAngle)
+    {
+        Quaternion rotation = Quaternion.identity;
+
+        if (pointSwordsOutward)
+        {
+            // Point the sword outward from the player
+            rotation = Quaternion.LookRotation(offset.normalized);
+        }
+        else
+        {
+            // Point inward toward player
+            rotation = Quaternion.LookRotation(-offset.normalized);
+        }
+
+        if (alignWithMovement)
+        {
+            // Align with orbital movement direction
+            Vector3 movementDirection = new Vector3(-Mathf.Sin(orbitAngle * Mathf.Deg2Rad), 0, Mathf.Cos(orbitAngle * Mathf.Deg2Rad));
+            rotation = Quaternion.LookRotation(movementDirection);
+        }
+
+        // Apply custom angles
+        rotation *= Quaternion.Euler(swordPitchAngle, swordYawOffset, swordRollAngle);
+
+        return rotation;
+    }
+
     void HandleInput()
     {
-        // Only allow shooting in battle mode
         if (!isBattleMode || isPerformingDramaticEntry) return;
 
-        if (Input.GetMouseButtonDown(1)) // Right click
+        if (Input.GetMouseButtonDown(1))
         {
-            // Check if camera is ready for shooting (cursor locked)
             if (cameraController != null && !cameraController.IsReadyForShooting())
             {
                 Debug.Log("Lock cursor first to shoot swords!");
@@ -482,7 +634,6 @@ public class FloatingSwordSystem : MonoBehaviour
         SwordController availableSword = GetAvailableSword();
         if (availableSword == null) return;
 
-        // Raycast from camera center to find target
         Ray ray = playerCamera.ScreenPointToRay(new Vector3(Screen.width / 2, Screen.height / 2, 0));
         RaycastHit hit;
 
@@ -491,10 +642,8 @@ public class FloatingSwordSystem : MonoBehaviour
         {
             targetPoint = hit.point;
 
-            // Check if hit object is an enemy
             if (hit.collider.CompareTag(enemyTag))
             {
-                // Handle enemy hit (you can expand this)
                 Debug.Log("Hit enemy: " + hit.collider.name);
             }
         }
@@ -503,7 +652,6 @@ public class FloatingSwordSystem : MonoBehaviour
             targetPoint = ray.origin + ray.direction * shootRange;
         }
 
-        // Shoot from sword's current position toward target
         availableSword.ShootFromCurrentPosition(targetPoint, shootSpeed, shootTiltAngle, shootRotationSpeed);
         StartCoroutine(ReturnSwordAfterDelay(availableSword, swordReturnDelay));
     }
@@ -524,12 +672,117 @@ public class FloatingSwordSystem : MonoBehaviour
         sword.ReturnToFloat();
     }
 
-    // Public getters
     public bool IsBattleMode => isBattleMode;
     public bool IsTransitioning => isTransitioning;
     public bool IsPerformingDramaticEntry => isPerformingDramaticEntry;
 }
 
+// Magic Circle Controller
+public class MagicCircleController : MonoBehaviour
+{
+    private Renderer[] circleRenderers;
+    private Material[] originalMaterials;
+    private Material[] glowMaterials;
+    private float baseGlowIntensity = 1f;
+
+    public void Initialize(float glowIntensity)
+    {
+        baseGlowIntensity = glowIntensity;
+        SetupGlowSystem();
+    }
+
+    void SetupGlowSystem()
+    {
+        circleRenderers = GetComponentsInChildren<Renderer>();
+        
+        if (circleRenderers.Length > 0)
+        {
+            originalMaterials = new Material[circleRenderers.Length];
+            glowMaterials = new Material[circleRenderers.Length];
+
+            for (int i = 0; i < circleRenderers.Length; i++)
+            {
+                if (circleRenderers[i] != null && circleRenderers[i].material != null)
+                {
+                    originalMaterials[i] = circleRenderers[i].material;
+                    glowMaterials[i] = new Material(originalMaterials[i]);
+
+                    // Setup for emission if material supports it
+                    if (glowMaterials[i].HasProperty("_EmissionColor"))
+                    {
+                        glowMaterials[i].EnableKeyword("_EMISSION");
+                    }
+
+                    // Setup for transparency
+                    if (glowMaterials[i].HasProperty("_Mode"))
+                    {
+                        glowMaterials[i].SetFloat("_Mode", 2); // Fade mode
+                        glowMaterials[i].SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                        glowMaterials[i].SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                        glowMaterials[i].SetInt("_ZWrite", 0);
+                        glowMaterials[i].DisableKeyword("_ALPHATEST_ON");
+                        glowMaterials[i].EnableKeyword("_ALPHABLEND_ON");
+                        glowMaterials[i].DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                        glowMaterials[i].renderQueue = 3000;
+                    }
+                }
+            }
+        }
+    }
+
+    public void SetVisibility(float visibility)
+    {
+        for (int i = 0; i < circleRenderers.Length; i++)
+        {
+            if (circleRenderers[i] != null)
+            {
+                if (visibility <= 0f)
+                {
+                    circleRenderers[i].enabled = false;
+                }
+                else
+                {
+                    circleRenderers[i].enabled = true;
+
+                    if (glowMaterials[i] != null)
+                    {
+                        circleRenderers[i].material = glowMaterials[i];
+                        
+                        Color color = glowMaterials[i].color;
+                        color.a = visibility;
+                        glowMaterials[i].color = color;
+
+                        // Update emission
+                        if (glowMaterials[i].HasProperty("_EmissionColor"))
+                        {
+                            Color emissionColor = glowMaterials[i].GetColor("_EmissionColor");
+                            emissionColor *= visibility;
+                            glowMaterials[i].SetColor("_EmissionColor", emissionColor);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public void SetGlowIntensity(float intensity)
+    {
+        for (int i = 0; i < circleRenderers.Length; i++)
+        {
+            if (circleRenderers[i] != null && glowMaterials[i] != null)
+            {
+                if (glowMaterials[i].HasProperty("_EmissionColor"))
+                {
+                    Color baseEmission = originalMaterials[i].GetColor("_EmissionColor");
+                    Color newEmission = baseEmission * intensity;
+                    glowMaterials[i].SetColor("_EmissionColor", newEmission);
+                }
+            }
+        }
+    }
+}
+
+// Enhanced Sword Controller
 public class SwordController : MonoBehaviour
 {
     private FloatingSwordSystem swordSystem;
@@ -552,6 +805,11 @@ public class SwordController : MonoBehaviour
     private Renderer[] swordRenderers;
     private Material[] originalMaterials;
     private Material[] fadeMaterials;
+    private Material[] glowMaterials;
+
+    // Enhanced visual effects
+    private float currentGlowIntensity = 0f;
+    private bool hasGlowEffect = false;
 
     public bool IsFloating => isFloating;
 
@@ -576,7 +834,7 @@ public class SwordController : MonoBehaviour
         swordSystem = system;
         swordIndex = index;
 
-        // Add a rigidbody if it doesn't exist and configure it properly
+        // Setup rigidbody
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb == null)
         {
@@ -585,27 +843,26 @@ public class SwordController : MonoBehaviour
         rb.useGravity = false;
         rb.isKinematic = true;
 
-        // Add collider if it doesn't exist and make it a trigger to avoid physics conflicts
+        // Setup collider
         Collider col = GetComponent<Collider>();
         if (col == null)
         {
             col = gameObject.AddComponent<CapsuleCollider>();
         }
-        col.isTrigger = true; // Make it a trigger to avoid physics conflicts during movement
+        col.isTrigger = true;
 
-        // Setup visibility system
-        SetupVisibilitySystem();
+        SetupEnhancedVisualSystem();
     }
 
-    void SetupVisibilitySystem()
+    void SetupEnhancedVisualSystem()
     {
-        // Get all renderers on this sword
         swordRenderers = GetComponentsInChildren<Renderer>();
 
         if (swordRenderers.Length > 0)
         {
             originalMaterials = new Material[swordRenderers.Length];
             fadeMaterials = new Material[swordRenderers.Length];
+            glowMaterials = new Material[swordRenderers.Length];
 
             for (int i = 0; i < swordRenderers.Length; i++)
             {
@@ -613,23 +870,39 @@ public class SwordController : MonoBehaviour
                 {
                     originalMaterials[i] = swordRenderers[i].material;
 
-                    // Create fade material copy
+                    // Create fade material
                     fadeMaterials[i] = new Material(originalMaterials[i]);
+                    SetupTransparencyMaterial(fadeMaterials[i]);
 
-                    // Make material support transparency
-                    if (fadeMaterials[i].HasProperty("_Mode"))
+                    // Create glow material
+                    glowMaterials[i] = new Material(originalMaterials[i]);
+                    SetupTransparencyMaterial(glowMaterials[i]);
+                    
+                    // Setup emission for glow effect
+                    if (glowMaterials[i].HasProperty("_EmissionColor"))
                     {
-                        fadeMaterials[i].SetFloat("_Mode", 2); // Fade mode
-                        fadeMaterials[i].SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                        fadeMaterials[i].SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                        fadeMaterials[i].SetInt("_ZWrite", 0);
-                        fadeMaterials[i].DisableKeyword("_ALPHATEST_ON");
-                        fadeMaterials[i].EnableKeyword("_ALPHABLEND_ON");
-                        fadeMaterials[i].DisableKeyword("_ALPHAPREMULTIPLY_ON");
-                        fadeMaterials[i].renderQueue = 3000;
+                        glowMaterials[i].EnableKeyword("_EMISSION");
+                        Color emissionColor = glowMaterials[i].color * 2f; // Base glow
+                        glowMaterials[i].SetColor("_EmissionColor", emissionColor);
+                        hasGlowEffect = true;
                     }
                 }
             }
+        }
+    }
+
+    void SetupTransparencyMaterial(Material mat)
+    {
+        if (mat.HasProperty("_Mode"))
+        {
+            mat.SetFloat("_Mode", 2); // Fade mode
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.EnableKeyword("_ALPHABLEND_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.renderQueue = 3000;
         }
     }
 
@@ -638,49 +911,74 @@ public class SwordController : MonoBehaviour
         battleModeActive = enabled;
         currentVisibility = visibility;
 
-        // Update visual state
+        UpdateVisualState();
+    }
+
+    public void SetEntryGlow(float intensity)
+    {
+        currentGlowIntensity = intensity;
+        UpdateVisualState();
+    }
+
+    void UpdateVisualState()
+    {
         for (int i = 0; i < swordRenderers.Length; i++)
         {
             if (swordRenderers[i] != null)
             {
-                if (visibility <= 0f)
+                if (currentVisibility <= 0f)
                 {
-                    // Completely invisible
                     swordRenderers[i].enabled = false;
                 }
                 else
                 {
                     swordRenderers[i].enabled = true;
 
-                    if (visibility >= 1f)
+                    Material materialToUse;
+                    
+                    if (currentGlowIntensity > 0f && hasGlowEffect)
                     {
-                        // Fully visible - use original material
-                        if (originalMaterials[i] != null)
+                        // Use glow material
+                        materialToUse = glowMaterials[i];
+                        
+                        // Update glow intensity
+                        if (materialToUse.HasProperty("_EmissionColor"))
                         {
-                            swordRenderers[i].material = originalMaterials[i];
+                            Color baseColor = originalMaterials[i].color;
+                            Color emissionColor = baseColor * currentGlowIntensity;
+                            materialToUse.SetColor("_EmissionColor", emissionColor);
                         }
+                    }
+                    else if (currentVisibility >= 1f)
+                    {
+                        // Use original material
+                        materialToUse = originalMaterials[i];
                     }
                     else
                     {
-                        // Partially visible - use fade material
-                        if (fadeMaterials[i] != null)
-                        {
-                            swordRenderers[i].material = fadeMaterials[i];
-                            Color color = fadeMaterials[i].color;
-                            color.a = visibility;
-                            fadeMaterials[i].color = color;
-                        }
+                        // Use fade material
+                        materialToUse = fadeMaterials[i];
+                    }
+
+                    swordRenderers[i].material = materialToUse;
+
+                    // Update alpha
+                    if (materialToUse != originalMaterials[i])
+                    {
+                        Color color = materialToUse.color;
+                        color.a = currentVisibility;
+                        materialToUse.color = color;
                     }
                 }
             }
         }
 
-        // Update collider based on battle mode - keep as trigger to avoid physics issues
+        // Update collider
         Collider col = GetComponent<Collider>();
         if (col != null)
         {
-            col.enabled = battleModeActive && visibility > 0.5f;
-            col.isTrigger = true; // Always keep as trigger for movement phases
+            col.enabled = battleModeActive && currentVisibility > 0.5f;
+            col.isTrigger = true;
         }
     }
 
@@ -722,7 +1020,6 @@ public class SwordController : MonoBehaviour
 
     void MoveToFloatingPosition()
     {
-        // Only move if in battle mode or transitioning
         if (!battleModeActive && currentVisibility <= 0f) return;
 
         transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * 5f);
@@ -738,22 +1035,20 @@ public class SwordController : MonoBehaviour
         shootSpeed = speed;
         shootRotationSpeed = rotSpeed;
 
-        // Calculate direction to target
         Vector3 direction = (target - transform.position).normalized;
-
-        // Create rotation that points toward target with tilt
         Quaternion lookRotation = Quaternion.LookRotation(direction);
-        // Tilt the sword forward (around the right axis) so the sharp end points forward
         Quaternion tiltRotation = Quaternion.AngleAxis(-tiltAngle, Vector3.right);
         initialShootRotation = lookRotation * tiltRotation;
         transform.rotation = initialShootRotation;
 
-        // Enable collider for shooting but keep it as trigger initially
+        // Add shooting glow effect
+        SetEntryGlow(2f);
+
         Collider swordCollider = GetComponent<Collider>();
         if (swordCollider != null)
         {
             swordCollider.enabled = true;
-            swordCollider.isTrigger = true; // Keep as trigger to avoid physics conflicts during flight
+            swordCollider.isTrigger = true;
         }
     }
 
@@ -762,25 +1057,21 @@ public class SwordController : MonoBehaviour
         Vector3 direction = (shootTarget - transform.position).normalized;
         transform.position += direction * shootSpeed * Time.deltaTime;
 
-        // Add spinning rotation during flight for visual effect
         if (shootRotationSpeed > 0)
         {
             Quaternion spinRotation = Quaternion.AngleAxis(shootRotationSpeed * Time.deltaTime, transform.forward);
             transform.rotation = spinRotation * transform.rotation;
         }
 
-        // Check if we've reached the target or passed it
         if (Vector3.Distance(transform.position, shootTarget) < 0.5f)
         {
             isShooting = false;
-            // Handle hitting the target
             OnReachTarget();
         }
     }
 
     void OnReachTarget()
     {
-        // Perform a small raycast check for enemies at target location
         Collider[] hitEnemies = Physics.OverlapSphere(transform.position, 1f);
         foreach (Collider col in hitEnemies)
         {
@@ -792,7 +1083,7 @@ public class SwordController : MonoBehaviour
                     enemyHealth.TakeDamage(25f);
                 }
                 Debug.Log("Sword hit enemy: " + col.name);
-                break; // Only hit one enemy per sword
+                break;
             }
         }
     }
@@ -803,28 +1094,26 @@ public class SwordController : MonoBehaviour
         isShooting = false;
         isInEntryMode = false;
 
-        // Reset collider to trigger mode for floating
+        // Remove shooting glow
+        SetEntryGlow(0f);
+
         Collider col = GetComponent<Collider>();
         if (col != null)
         {
             col.isTrigger = true;
         }
-
-        // Smoothly return to floating rotation (will be handled in MoveToFloatingPosition)
-        // The floating rotation will be set by the main system
     }
 
     void OnTriggerEnter(Collider other)
     {
         if (isShooting && other.CompareTag(swordSystem.enemyTag))
         {
-            // Additional hit detection if needed
             Debug.Log("Sword hit: " + other.name);
         }
     }
 }
 
-// Optional: Simple enemy health script for testing
+// Enemy Health Script (unchanged)
 public class EnemyHealth : MonoBehaviour
 {
     public float maxHealth = 100f;
@@ -849,5 +1138,6 @@ public class EnemyHealth : MonoBehaviour
     void Die()
     {
         Debug.Log($"{gameObject.name} died!");
+        // Add death effects here
     }
 }

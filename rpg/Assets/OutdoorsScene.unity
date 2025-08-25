@@ -1477,14 +1477,217 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7894368391b25024980ba2b6e89914cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  swordPrefab: {fileID: 5031791142147271447, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
+  swordPrefab: {fileID: 1615237783868371885, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
   swordCount: 6
   floatDistance: 1.51
   floatHeight: 0.5
+  swordPitchAngle: 90
+  swordYawOffset: 0
+  swordRollAngle: 0
+  pointSwordsOutward: 1
+  alignWithMovement: 0
   rotationSpeed: 30
   bobSpeed: 2
   bobAmount: 0.2
+  shootRotationSpeed: 180
+  shootSpeed: 20
+  shootRange: 100
+  swordReturnDelay: 3
+  shootTiltAngle: 45
+  enemyLayer:
+    serializedVersion: 2
+    m_Bits: 8
+  enemyTag: Enemy
   battleModeToggleKey: 120
+  battleModeTransitionTime: 1
+  battleModeTransitionCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  magicCirclePrefab: {fileID: 0}
+  circleHeight: 3
+  circleScale: 4.41
+  circleSpinSpeed: 45
+  reverseCircleRotation: 0
+  circleFadeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  circleGlowIntensity: 2
+  entryRiseHeight: 5
+  entryRiseSpeed: 8
+  entryPauseTime: 0.5
+  duplicationTime: 1
+  spreadToPositionTime: 1.5
+  swordSpinDuringEntry: 720
+  swordGlowDuringEntry: 3
+  entrySpinCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  entryGlowCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  useSpiralEntry: 1
+  spiralRadius: 1
+  spiralSpeed: 2
+  spiralTurns: 3
+  useVortexExit: 1
+  vortexSpinSpeed: 360
+  vortexPullSpeed: 5
+  vortexCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  entryRiseCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   playerCamera: {fileID: 1823688466}
   shootOrigin: {fileID: 0}
   cameraController: {fileID: 1823688469}
@@ -1675,67 +1878,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5990797851976464007}
   m_Mesh: {fileID: -5320645604720956815, guid: d0192ae898524e84a8ba11bfbb9f9742, type: 3}
---- !u!1001 &1201040830516887738
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: -1.9626157e-16
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0.70710677
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0.7071068
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2083747132650262797, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 5031791142147271447, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_Name
-      value: 112_inch_scale_sword_a
-      objectReference: {fileID: 0}
-    - target: {fileID: 5031791142147271447, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
-      propertyPath: m_IsActive
-      value: 0
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 65c505014240cde41b2e5737809c30c5, type: 3}
 --- !u!1 &1235985623640679300
 GameObject:
   m_ObjectHideFlags: 0
@@ -2428,6 +2570,67 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!1001 &6010197302451667284
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.646
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 1.62
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 222005330274191402, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 603315256169386640, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_Name
+      value: magic circle model
+      objectReference: {fileID: 0}
+    - target: {fileID: 603315256169386640, guid: 6db17a083458a3941b756d1e97046495, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6db17a083458a3941b756d1e97046495, type: 3}
 --- !u!33 &6283206258422128832
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -2460,6 +2663,67 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!1001 &6684287468426715955
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1615237783868371885, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_Name
+      value: Spectral lightning blade
+      objectReference: {fileID: 0}
+    - target: {fileID: 1615237783868371885, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.008714067
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.17051822
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.11139512
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2099146472316676375, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 532c03b457e71394ebc21c836c102e8b, type: 3}
 --- !u!23 &6991347040606370996
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -2768,8 +3032,9 @@ SceneRoots:
   - {fileID: 2013410475}
   - {fileID: 938230715}
   - {fileID: 1887218736}
-  - {fileID: 1201040830516887738}
   - {fileID: 1757945025}
   - {fileID: 32992282}
   - {fileID: 898004545}
   - {fileID: 950412224}
+  - {fileID: 6684287468426715955}
+  - {fileID: 6010197302451667284}
