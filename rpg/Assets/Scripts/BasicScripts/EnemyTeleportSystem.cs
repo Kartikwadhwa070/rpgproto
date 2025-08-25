@@ -16,6 +16,13 @@ public class EnemyTeleportSystem : MonoBehaviour
     public Color teleportEffectColor = new Color(0.5f, 0f, 1f, 0.8f);
     public AnimationCurve teleportCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
+    [Header("Afterimage Settings")]
+    public bool enableAfterImage = true;
+    public int afterImageCount = 3;
+    public float afterImageInterval = 0.05f;
+    public float afterImageLifetime = 0.4f;
+    public Color afterImageColor = new Color(0.5f, 0f, 1f, 0.5f);
+
     [Header("Audio")]
     public AudioClip teleportSound;
     public float soundVolume = 0.7f;
@@ -69,7 +76,6 @@ public class EnemyTeleportSystem : MonoBehaviour
     {
         HandleTeleportInput();
 
-        // Update target enemy highlighting
         if (!isTeleporting)
         {
             UpdateTargetEnemy();
@@ -78,9 +84,21 @@ public class EnemyTeleportSystem : MonoBehaviour
 
     void SetupTeleportMaterial()
     {
-        // Create a simple teleport effect material
+        if (playerRenderers.Length > 0)
+        {
+            List<Material> mats = new List<Material>();
+            foreach (Renderer renderer in playerRenderers)
+            {
+                if (renderer != null)
+                {
+                    mats.AddRange(renderer.materials);
+                }
+            }
+            originalMaterials = mats.ToArray();
+        }
+
         teleportMaterial = new Material(Shader.Find("Standard"));
-        teleportMaterial.SetFloat("_Mode", 3); // Transparent mode
+        teleportMaterial.SetFloat("_Mode", 3);
         teleportMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
         teleportMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         teleportMaterial.SetInt("_ZWrite", 0);
@@ -112,9 +130,6 @@ public class EnemyTeleportSystem : MonoBehaviour
     void UpdateTargetEnemy()
     {
         targetEnemy = FindBestTeleportTarget();
-
-        // You can add visual feedback here, like highlighting the target enemy
-        // For now, we'll just keep track of the target
     }
 
     GameObject FindBestTeleportTarget()
@@ -125,28 +140,22 @@ public class EnemyTeleportSystem : MonoBehaviour
 
         Vector3 playerPos = transform.position;
         Vector3 cameraForward = playerCamera.transform.forward;
-        cameraForward.y = 0; // Keep it horizontal
+        cameraForward.y = 0;
         cameraForward.Normalize();
 
         foreach (GameObject enemy in enemies)
         {
-            // Check if enemy is on the correct layer
             if (((1 << enemy.layer) & enemyLayerMask) == 0)
                 continue;
 
             Vector3 enemyPos = enemy.transform.position;
             float distance = Vector3.Distance(playerPos, enemyPos);
 
-            // Check if enemy is in range
             if (distance <= teleportRange)
             {
-                // Check if enemy is roughly in front of the camera (optional - makes it more intuitive)
                 Vector3 dirToEnemy = (enemyPos - playerPos).normalized;
                 dirToEnemy.y = 0;
-
                 float dotProduct = Vector3.Dot(cameraForward, dirToEnemy);
-
-                // Prioritize enemies in view (dot > 0) but allow any enemy in range
                 float priority = distance - (dotProduct > 0 ? dotProduct * 5f : 0);
 
                 if (priority < closestDistance)
@@ -156,7 +165,6 @@ public class EnemyTeleportSystem : MonoBehaviour
                 }
             }
         }
-
         return closestEnemy;
     }
 
@@ -167,21 +175,15 @@ public class EnemyTeleportSystem : MonoBehaviour
         isTeleporting = true;
         canTeleport = false;
 
-        // Calculate position behind enemy
         Vector3 enemyPos = enemy.transform.position;
         Vector3 enemyForward = enemy.transform.forward;
         Vector3 behindPos = enemyPos - (enemyForward * behindDistance);
-
-        // Adjust height
         behindPos.y = enemyPos.y + teleportHeight;
 
-        // Make sure the position is valid (not inside walls, etc.)
         behindPos = ValidateTeleportPosition(behindPos, enemyPos);
 
-        // Store original position
         Vector3 originalPos = transform.position;
 
-        // Play sound effect
         if (teleportSound != null && audioSource != null)
         {
             audioSource.PlayOneShot(teleportSound, soundVolume);
@@ -190,13 +192,12 @@ public class EnemyTeleportSystem : MonoBehaviour
         // Fade out effect
         yield return StartCoroutine(TeleportVisualEffect(true));
 
-        // Disable character controller temporarily
+        // Disable controller to teleport
         characterController.enabled = false;
 
-        // Teleport instantly
+        // --- TELEPORT INSTANTLY ---
         transform.position = behindPos;
 
-        // Face the enemy
         Vector3 directionToEnemy = (enemyPos - behindPos).normalized;
         directionToEnemy.y = 0;
         if (directionToEnemy != Vector3.zero)
@@ -204,36 +205,37 @@ public class EnemyTeleportSystem : MonoBehaviour
             transform.rotation = Quaternion.LookRotation(directionToEnemy);
         }
 
-        // Re-enable character controller
         characterController.enabled = true;
 
-        // Small delay for dramatic effect
+        // --- SPAWN AFTERIMAGE TRAIL ALONG PATH ---
+        if (enableAfterImage)
+        {
+            StartCoroutine(SpawnAfterImageTrail(originalPos, behindPos, transform.rotation));
+        }
+
         yield return new WaitForSeconds(0.1f);
 
-        // Fade in effect
+        // Fade back in
         yield return StartCoroutine(TeleportVisualEffect(false));
 
         isTeleporting = false;
 
-        // Start cooldown
         StartCoroutine(TeleportCooldown());
 
         Debug.Log($"Teleported behind {enemy.name}!");
     }
 
+
     Vector3 ValidateTeleportPosition(Vector3 desiredPos, Vector3 enemyPos)
     {
-        // Simple validation - you can make this more sophisticated
         Vector3 validatedPos = desiredPos;
 
-        // Raycast down to find ground
         RaycastHit hit;
         if (Physics.Raycast(desiredPos + Vector3.up * 2f, Vector3.down, out hit, 10f))
         {
-            validatedPos.y = hit.point.y + 0.1f; // Slightly above ground
+            validatedPos.y = hit.point.y + 0.1f;
         }
 
-        // Check if position is blocked
         float capsuleRadius = characterController.radius;
         float capsuleHeight = characterController.height;
 
@@ -242,7 +244,6 @@ public class EnemyTeleportSystem : MonoBehaviour
 
         if (Physics.CheckCapsule(capsuleBottom, capsuleTop, capsuleRadius))
         {
-            // If blocked, try positions around the enemy
             for (int i = 0; i < 8; i++)
             {
                 float angle = i * 45f * Mathf.Deg2Rad;
@@ -260,7 +261,6 @@ public class EnemyTeleportSystem : MonoBehaviour
                 }
             }
         }
-
         return validatedPos;
     }
 
@@ -268,40 +268,18 @@ public class EnemyTeleportSystem : MonoBehaviour
     {
         float timer = 0f;
 
-        // Store original materials if not already stored
-        if (originalMaterials == null && playerRenderers.Length > 0)
-        {
-            List<Material> mats = new List<Material>();
-            foreach (Renderer renderer in playerRenderers)
-            {
-                mats.AddRange(renderer.materials);
-            }
-            originalMaterials = mats.ToArray();
-        }
-
         while (timer < teleportFadeTime)
         {
             timer += Time.deltaTime;
             float normalizedTime = timer / teleportFadeTime;
             float curveValue = teleportCurve.Evaluate(normalizedTime);
 
-            if (fadeOut)
-            {
-                // Fade to teleport effect
-                float alpha = Mathf.Lerp(1f, 0f, curveValue);
-                SetPlayerAlpha(alpha);
-            }
-            else
-            {
-                // Fade from teleport effect
-                float alpha = Mathf.Lerp(0f, 1f, curveValue);
-                SetPlayerAlpha(alpha);
-            }
+            float alpha = fadeOut ? Mathf.Lerp(1f, 0f, curveValue) : Mathf.Lerp(0f, 1f, curveValue);
+            SetPlayerAlpha(alpha);
 
             yield return null;
         }
 
-        // Ensure final state
         if (!fadeOut)
         {
             RestoreOriginalMaterials();
@@ -310,27 +288,34 @@ public class EnemyTeleportSystem : MonoBehaviour
 
     void SetPlayerAlpha(float alpha)
     {
-        foreach (Renderer renderer in playerRenderers)
+        if (alpha <= 0.1f)
         {
-            if (renderer == null) continue;
-
-            Material[] materials = renderer.materials;
-            for (int i = 0; i < materials.Length; i++)
+            foreach (Renderer renderer in playerRenderers)
             {
-                if (alpha <= 0.1f)
+                if (renderer != null) renderer.enabled = false;
+            }
+        }
+        else
+        {
+            foreach (Renderer renderer in playerRenderers)
+            {
+                if (renderer != null)
                 {
-                    // Use teleport material when nearly invisible
-                    materials[i] = teleportMaterial;
-                }
-                else
-                {
-                    // Modify alpha of current material
-                    Color color = materials[i].color;
-                    color.a = alpha;
-                    materials[i].color = color;
+                    renderer.enabled = true;
+                    Material[] materials = renderer.materials;
+                    for (int i = 0; i < materials.Length; i++)
+                    {
+                        if (originalMaterials != null && i < originalMaterials.Length)
+                        {
+                            materials[i] = new Material(originalMaterials[i]);
+                            Color color = materials[i].color;
+                            color.a = alpha;
+                            materials[i].color = color;
+                        }
+                    }
+                    renderer.materials = materials;
                 }
             }
-            renderer.materials = materials;
         }
     }
 
@@ -342,6 +327,8 @@ public class EnemyTeleportSystem : MonoBehaviour
         foreach (Renderer renderer in playerRenderers)
         {
             if (renderer == null) continue;
+
+            renderer.enabled = true;
 
             Material[] rendererMats = new Material[renderer.materials.Length];
             for (int i = 0; i < rendererMats.Length && matIndex < originalMaterials.Length; i++)
@@ -360,26 +347,93 @@ public class EnemyTeleportSystem : MonoBehaviour
         Debug.Log("Teleport ready!");
     }
 
-    // Public getters for UI or other systems
+    IEnumerator SpawnAfterImageTrail(Vector3 startPos, Vector3 endPos, Quaternion rot)
+    {
+        for (int i = 0; i < afterImageCount; i++)
+        {
+            float t = (float)i / (afterImageCount - 1); // normalize 0 → 1
+            Vector3 spawnPos = Vector3.Lerp(startPos, endPos, t);
+
+            CreateAfterImage(spawnPos, rot);
+
+            yield return new WaitForSeconds(afterImageInterval);
+        }
+    }
+
+
+    void CreateAfterImage(Vector3 pos, Quaternion rot)
+    {
+        GameObject ghost = new GameObject("AfterImage");
+        ghost.transform.position = pos;
+        ghost.transform.rotation = rot;
+
+        foreach (Renderer r in playerRenderers)
+        {
+            if (r == null) continue;
+            GameObject ghostPart = new GameObject("GhostPart");
+            ghostPart.transform.SetParent(ghost.transform);
+            ghostPart.transform.position = r.transform.position;
+            ghostPart.transform.rotation = r.transform.rotation;
+            ghostPart.transform.localScale = r.transform.localScale;
+
+            MeshFilter mf = ghostPart.AddComponent<MeshFilter>();
+            MeshRenderer mr = ghostPart.AddComponent<MeshRenderer>();
+
+            MeshFilter originalMF = r.GetComponent<MeshFilter>();
+            if (originalMF != null)
+            {
+                mf.mesh = originalMF.sharedMesh;
+            }
+
+            Material mat = new Material(r.material);
+            mat.color = afterImageColor;
+            mr.material = mat;
+        }
+        StartCoroutine(FadeAfterImage(ghost));
+    }
+
+    IEnumerator FadeAfterImage(GameObject ghost)
+    {
+        float timer = 0f;
+        Renderer[] renderers = ghost.GetComponentsInChildren<Renderer>();
+
+        while (timer < afterImageLifetime)
+        {
+            timer += Time.deltaTime;
+            float t = timer / afterImageLifetime;
+
+            foreach (Renderer r in renderers)
+            {
+                foreach (Material m in r.materials)
+                {
+                    if (m.HasProperty("_Color"))
+                    {
+                        Color c = m.color;
+                        c.a = Mathf.Lerp(afterImageColor.a, 0f, t);
+                        m.color = c;
+                    }
+                }
+            }
+            yield return null;
+        }
+        Destroy(ghost);
+    }
+
     public bool CanTeleport => canTeleport && !isTeleporting;
     public bool IsTeleporting => isTeleporting;
     public GameObject CurrentTarget => targetEnemy;
     public float TeleportCooldownRemaining => canTeleport ? 0f : teleportCooldown;
 
-    // Gizmos for debugging
     void OnDrawGizmosSelected()
     {
-        // Draw teleport range
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, teleportRange);
 
-        // Draw line to current target
         if (targetEnemy != null)
         {
             Gizmos.color = Color.red;
             Gizmos.DrawLine(transform.position, targetEnemy.transform.position);
 
-            // Draw teleport position preview
             Vector3 enemyPos = targetEnemy.transform.position;
             Vector3 enemyForward = targetEnemy.transform.forward;
             Vector3 behindPos = enemyPos - (enemyForward * behindDistance);
