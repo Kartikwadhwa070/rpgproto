@@ -138,10 +138,10 @@ public class MeleeSwordSystem : MonoBehaviour
     void ApplyAttackEffects(Collider enemy, int comboIndex, AttackData attackData)
     {
         // Apply damage
-        EnemyHealth enemyHealth = enemy.GetComponent<EnemyHealth>();
-        if (enemyHealth != null)
+        EnemyHP enemyHP = enemy.GetComponent<EnemyHP>();
+        if (enemyHP != null)
         {
-            enemyHealth.TakeDamage(attackData.damage);
+            enemyHP.TakeDamage(attackData.damage);
         }
 
         // Apply special effects based on combo index

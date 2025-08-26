@@ -1077,10 +1077,10 @@ public class SwordController : MonoBehaviour
         {
             if (col.CompareTag(swordSystem.enemyTag))
             {
-                EnemyHealth enemyHealth = col.GetComponent<EnemyHealth>();
-                if (enemyHealth != null)
+                EnemyHP enemyHP = col.GetComponent<EnemyHP>();
+                if (enemyHP != null)
                 {
-                    enemyHealth.TakeDamage(25f);
+                    enemyHP.TakeDamage(25f);
                 }
                 Debug.Log("Sword hit enemy: " + col.name);
                 break;
@@ -1113,31 +1113,3 @@ public class SwordController : MonoBehaviour
     }
 }
 
-// Enemy Health Script (unchanged)
-public class EnemyHealth : MonoBehaviour
-{
-    public float maxHealth = 100f;
-    private float currentHealth;
-
-    void Start()
-    {
-        currentHealth = maxHealth;
-    }
-
-    public void TakeDamage(float damage)
-    {
-        currentHealth -= damage;
-        Debug.Log($"{gameObject.name} took {damage} damage. Health: {currentHealth}");
-
-        if (currentHealth <= 0)
-        {
-            Die();
-        }
-    }
-
-    void Die()
-    {
-        Debug.Log($"{gameObject.name} died!");
-        // Add death effects here
-    }
-}
