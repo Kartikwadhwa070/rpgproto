@@ -167,7 +167,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_UiScaleMode: 0
+  m_UiScaleMode: 1
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
   m_ReferenceResolution: {x: 800, y: 600}
@@ -559,8 +559,6 @@ MonoBehaviour:
   landingRecoveryTime: 0.5
   knockbackRecoveryTime: 0.3
   maxKnockbackVelocity: 10
-  autoFixColliderPosition: 1
-  colliderGroundOffset: 0.1
   showDebugInfo: 0
 --- !u!114 &849106303
 MonoBehaviour:
@@ -577,7 +575,7 @@ MonoBehaviour:
   maxHealth: 100
   showHealthBar: 1
   destroyOnDeath: 1
-  deathDelay: 2
+  deathDelay: 0
   flashOnDamage: 1
   damageFlashColor: {r: 1, g: 0, b: 0, a: 1}
   flashDuration: 0.1
@@ -607,7 +605,7 @@ NavMeshAgent:
   m_AutoBraking: 1
   m_AutoRepath: 1
   m_Height: 2
-  m_BaseOffset: 1.86
+  m_BaseOffset: 1
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
 --- !u!54 &849106305
@@ -657,9 +655,9 @@ CapsuleCollider:
   m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.5
-  m_Height: 2
+  m_Height: 3.76
   m_Direction: 1
-  m_Center: {x: 0, y: 0.22, z: 0}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!23 &849106307
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -722,7 +720,7 @@ Transform:
   m_GameObject: {fileID: 849106301}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 4.577052, y: 3.91, z: -4.2198677}
+  m_LocalPosition: {x: 4.577052, y: 1.85, z: -4.2198677}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -809,6 +807,7 @@ GameObject:
   - component: {fileID: 938230713}
   - component: {fileID: 938230712}
   - component: {fileID: 938230716}
+  - component: {fileID: 938230717}
   m_Layer: 7
   m_Name: Plane
   m_TagString: Untagged
@@ -932,6 +931,38 @@ MonoBehaviour:
   healthBarFill: {fileID: 0}
   healthBarBackground: {fileID: 0}
   healthBarOffset: {x: 0, y: 2.5, z: 0}
+--- !u!114 &938230717
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 938230711}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a5ac11cc976e418e8d13136b07e1f52, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_SerializedVersion: 0
+  m_AgentTypeID: 0
+  m_CollectObjects: 0
+  m_Size: {x: 10, y: 10, z: 10}
+  m_Center: {x: 0, y: 2, z: 0}
+  m_LayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_UseGeometry: 0
+  m_DefaultArea: 0
+  m_GenerateLinks: 0
+  m_IgnoreNavMeshAgent: 1
+  m_IgnoreNavMeshObstacle: 1
+  m_OverrideTileSize: 0
+  m_TileSize: 256
+  m_OverrideVoxelSize: 0
+  m_VoxelSize: 0.16666667
+  m_MinRegionArea: 2
+  m_NavMeshData: {fileID: 23800000, guid: 8795959b9d1559b478f5a9ea01633821, type: 2}
+  m_BuildHeightMesh: 0
 --- !u!1 &950412222
 GameObject:
   m_ObjectHideFlags: 0
@@ -1457,8 +1488,6 @@ MonoBehaviour:
   landingRecoveryTime: 0.5
   knockbackRecoveryTime: 0.3
   maxKnockbackVelocity: 10
-  autoFixColliderPosition: 1
-  colliderGroundOffset: 0.1
   showDebugInfo: 0
 --- !u!195 &1757945027
 NavMeshAgent:
