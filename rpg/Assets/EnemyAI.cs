@@ -27,6 +27,10 @@ public class BasicEnemyAI : MonoBehaviour
     public float knockbackRecoveryTime = 0.3f;
     public float maxKnockbackVelocity = 10f;
 
+    [Header("Collider Settings")]
+    public bool autoFixColliderPosition = true;
+    public float colliderGroundOffset = 0.1f; // Small offset above ground
+
     [Header("Debug")]
     public bool showDebugInfo = false;
 
@@ -56,6 +60,12 @@ public class BasicEnemyAI : MonoBehaviour
         InitializeComponents();
         SetupPhysics();
         FindPlayer();
+
+        // Fix position after everything is set up
+        if (autoFixColliderPosition)
+        {
+            StartCoroutine(FixInitialPosition());
+        }
     }
 
     void InitializeComponents()
@@ -90,6 +100,15 @@ public class BasicEnemyAI : MonoBehaviour
 
     void SetupPhysics()
     {
+        // Configure collider FIRST - this is crucial for proper positioning
+        if (capsuleCollider != null)
+        {
+            capsuleCollider.height = 2f;
+            capsuleCollider.radius = 0.5f;
+            // Set center so bottom of capsule is at ground level (y = 0)
+            capsuleCollider.center = new Vector3(0, 1f, 0); // Height/2 = 1f
+        }
+
         // Configure rigidbody for proper combat interactions
         rb.isKinematic = false;
         rb.useGravity = true;
@@ -97,16 +116,54 @@ public class BasicEnemyAI : MonoBehaviour
         rb.angularDamping = 5f; // Prevents excessive spinning
         rb.mass = 1f;
 
-        // Configure collider
-        if (capsuleCollider != null)
-        {
-            capsuleCollider.height = 2f;
-            capsuleCollider.radius = 0.5f;
-            capsuleCollider.center = new Vector3(0, 1f, 0);
-        }
-
         // Freeze rotation on X and Z axes to prevent falling over
         rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+    }
+
+    IEnumerator FixInitialPosition()
+    {
+        // Wait one frame for physics to settle
+        yield return new WaitForFixedUpdate();
+
+        // Method 1: Raycast to find proper ground position
+        RaycastHit hit;
+        Vector3 rayStart = transform.position + Vector3.up * 10f; // Start well above
+
+        if (Physics.Raycast(rayStart, Vector3.down, out hit, 20f, groundMask))
+        {
+            // Position the enemy so the bottom of the capsule is slightly above ground
+            float bottomOffset = capsuleCollider.center.y - (capsuleCollider.height * 0.5f);
+            Vector3 correctedPosition = hit.point + Vector3.up * (Mathf.Abs(bottomOffset) + colliderGroundOffset);
+
+            transform.position = correctedPosition;
+
+            if (showDebugInfo)
+            {
+                Debug.Log($"{gameObject.name} position corrected to: {correctedPosition}");
+            }
+        }
+        else
+        {
+            // Method 2: Use NavMesh sampling as fallback
+            NavMeshHit navHit;
+            if (NavMesh.SamplePosition(transform.position, out navHit, 10f, NavMesh.AllAreas))
+            {
+                float bottomOffset = capsuleCollider.center.y - (capsuleCollider.height * 0.5f);
+                Vector3 correctedPosition = navHit.position + Vector3.up * (Mathf.Abs(bottomOffset) + colliderGroundOffset);
+                transform.position = correctedPosition;
+
+                if (showDebugInfo)
+                {
+                    Debug.Log($"{gameObject.name} position corrected using NavMesh to: {correctedPosition}");
+                }
+            }
+        }
+
+        // Ensure NavMeshAgent is properly positioned
+        if (agent.enabled)
+        {
+            agent.ResetPath();
+        }
     }
 
     void FindPlayer()
@@ -152,7 +209,10 @@ public class BasicEnemyAI : MonoBehaviour
 
     void CheckGrounded()
     {
-        Vector3 rayStart = transform.position + Vector3.up * 0.1f;
+        // Improved ground checking - start from capsule bottom
+        float capsuleBottom = transform.position.y + capsuleCollider.center.y - (capsuleCollider.height * 0.5f);
+        Vector3 rayStart = new Vector3(transform.position.x, capsuleBottom + 0.1f, transform.position.z);
+
         bool wasGrounded = isGrounded;
         isGrounded = Physics.Raycast(rayStart, Vector3.down, groundCheckDistance + 0.1f, groundMask);
 
@@ -300,7 +360,11 @@ public class BasicEnemyAI : MonoBehaviour
             NavMeshHit hit;
             if (NavMesh.SamplePosition(transform.position, out hit, 2f, NavMesh.AllAreas))
             {
-                transform.position = hit.position;
+                // Maintain proper height when repositioning
+                float bottomOffset = capsuleCollider.center.y - (capsuleCollider.height * 0.5f);
+                Vector3 correctedPosition = hit.position + Vector3.up * (Mathf.Abs(bottomOffset) + colliderGroundOffset);
+                transform.position = correctedPosition;
+
                 agent.enabled = true;
                 agent.ResetPath();
             }
@@ -309,7 +373,10 @@ public class BasicEnemyAI : MonoBehaviour
                 // Try to return to last grounded position
                 if (NavMesh.SamplePosition(lastGroundedPosition, out hit, 2f, NavMesh.AllAreas))
                 {
-                    transform.position = hit.position;
+                    float bottomOffset = capsuleCollider.center.y - (capsuleCollider.height * 0.5f);
+                    Vector3 correctedPosition = hit.position + Vector3.up * (Mathf.Abs(bottomOffset) + colliderGroundOffset);
+                    transform.position = correctedPosition;
+
                     agent.enabled = true;
                     agent.ResetPath();
                 }
@@ -328,8 +395,17 @@ public class BasicEnemyAI : MonoBehaviour
 
     void DisplayDebugInfo()
     {
-        Debug.DrawRay(transform.position + Vector3.up * 0.1f, Vector3.down * (groundCheckDistance + 0.1f),
+        // Show ground check ray from capsule bottom
+        float capsuleBottom = transform.position.y + capsuleCollider.center.y - (capsuleCollider.height * 0.5f);
+        Vector3 rayStart = new Vector3(transform.position.x, capsuleBottom + 0.1f, transform.position.z);
+
+        Debug.DrawRay(rayStart, Vector3.down * (groundCheckDistance + 0.1f),
                      isGrounded ? Color.green : Color.red);
+
+        // Show capsule bounds
+        Vector3 capsuleTop = transform.position + Vector3.up * (capsuleCollider.center.y + capsuleCollider.height * 0.5f);
+        Vector3 capsuleBottomPos = transform.position + Vector3.up * (capsuleCollider.center.y - capsuleCollider.height * 0.5f);
+        Debug.DrawLine(capsuleBottomPos, capsuleTop, Color.blue);
 
         // Display state in scene view
         Vector3 textPos = transform.position + Vector3.up * 2.5f;
@@ -354,5 +430,16 @@ public class BasicEnemyAI : MonoBehaviour
         rotationSpeed = Mathf.Clamp(rotationSpeed, 0.1f, 20f);
         stoppingDistance = Mathf.Clamp(stoppingDistance, 0.5f, 5f);
         maxFollowDistance = Mathf.Clamp(maxFollowDistance, 5f, 50f);
+        colliderGroundOffset = Mathf.Clamp(colliderGroundOffset, 0f, 1f);
+    }
+
+    // Editor helper to fix position in play mode
+    [ContextMenu("Fix Position Now")]
+    void FixPositionNow()
+    {
+        if (Application.isPlaying && autoFixColliderPosition)
+        {
+            StartCoroutine(FixInitialPosition());
+        }
     }
 }
