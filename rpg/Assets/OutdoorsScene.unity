@@ -1038,6 +1038,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!137 &973768218 stripped
+SkinnedMeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 9137603241940987077, guid: 803a8a63ee045324c8316d11b7bbbb42, type: 3}
+  m_PrefabInstance: {fileID: 1778168929}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1240431268
 GameObject:
   m_ObjectHideFlags: 0
@@ -2136,7 +2141,7 @@ MonoBehaviour:
     m_RotationOrder: 4
   cameraTransform: {fileID: 1823688467}
   playerRenderers:
-  - {fileID: 1887218734}
+  - {fileID: 973768218}
 --- !u!54 &1778168936
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2188,7 +2193,7 @@ CharacterController:
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Center: {x: 0, y: 0.93, z: 0}
 --- !u!136 &1778168938
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -2211,7 +2216,7 @@ CapsuleCollider:
   m_Radius: 0.5
   m_Height: 1.6754324
   m_Direction: 1
-  m_Center: {x: 0, y: 0.90736187, z: 0}
+  m_Center: {x: 0, y: 1.18, z: 0}
 --- !u!1 &1823688464
 GameObject:
   m_ObjectHideFlags: 0
