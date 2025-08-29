@@ -9,6 +9,9 @@ public class SwordAttackDetection : MonoBehaviour
     private LayerMask enemyLayer;
     private string enemyTag;
 
+    [Header("Attack Settings")]
+    public float damage = 20f; // <-- NEW: damage per hit
+
     [Header("Debug Visualization")]
     public bool showDebugGizmos = true;
     public Color gizmoColor = Color.red;
@@ -20,6 +23,23 @@ public class SwordAttackDetection : MonoBehaviour
         attackAngle = angle;
         enemyLayer = layer;
         enemyTag = tag;
+    }
+
+    /// <summary>
+    /// Detect enemies and apply damage
+    /// </summary>
+    public void PerformAttack()
+    {
+        List<Collider> hitEnemies = DetectEnemies();
+
+        foreach (Collider enemy in hitEnemies)
+        {
+            EnemyHP hp = enemy.GetComponent<EnemyHP>();
+            if (hp != null)
+            {
+                hp.TakeDamage(damage);
+            }
+        }
     }
 
     public List<Collider> DetectEnemies()
@@ -36,13 +56,10 @@ public class SwordAttackDetection : MonoBehaviour
 
         foreach (Collider collider in nearbyColliders)
         {
-            // Check if it's an enemy
             if (!collider.CompareTag(enemyTag)) continue;
 
-            // Check if enemy is within attack cone
             if (IsWithinAttackCone(attackPosition, attackDirection, collider.transform.position))
             {
-                // Additional check: Make sure there's line of sight
                 if (HasLineOfSight(attackPosition, collider.transform.position))
                 {
                     hitEnemies.Add(collider);
@@ -57,7 +74,6 @@ public class SwordAttackDetection : MonoBehaviour
     {
         Vector3 directionToEnemy = (enemyPosition - attackPosition).normalized;
         float angleToEnemy = Vector3.Angle(attackDirection, directionToEnemy);
-
         return angleToEnemy <= attackAngle * 0.5f;
     }
 
@@ -66,17 +82,15 @@ public class SwordAttackDetection : MonoBehaviour
         Vector3 directionToEnemy = enemyPosition - attackPosition;
         float distanceToEnemy = directionToEnemy.magnitude;
 
-        // Raycast to check for obstacles
         RaycastHit hit;
         if (Physics.Raycast(attackPosition, directionToEnemy.normalized, out hit, distanceToEnemy))
         {
-            // If we hit the enemy first, we have line of sight
             return hit.collider.CompareTag(enemyTag);
         }
 
-        // No obstacles in the way
         return true;
     }
+
 
     void OnDrawGizmosSelected()
     {

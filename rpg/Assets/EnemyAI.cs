@@ -91,32 +91,32 @@ public class BasicEnemyAI : MonoBehaviour
 
     void SetupPhysics()
     {
-        // Configure NavMeshAgent FIRST
-        if (agent != null)
+        // Configure NavMeshAgent
+        if (agent != null && capsuleCollider != null)
         {
             agent.speed = followSpeed;
             agent.stoppingDistance = stoppingDistance;
             agent.acceleration = 8f;
             agent.angularSpeed = 240f;
 
-            // CRITICAL: Set baseOffset to match collider setup
-            // This prevents the agent from sinking into the ground
-            agent.baseOffset = 0f; // Keep at 0 for proper NavMesh alignment
-            agent.height = 2f; // Match collider height
-            agent.radius = 0.5f; // Match collider radius
+            // Match NavMeshAgent with CapsuleCollider
+            agent.height = capsuleCollider.height;
+            agent.radius = capsuleCollider.radius;
+            agent.baseOffset = capsuleCollider.center.y;
         }
 
-        // Configure rigidbody - KEEP KINEMATIC initially
+        // Configure Rigidbody
         if (rb != null)
         {
-            rb.isKinematic = true; // Start kinematic, change only during combat
-            rb.useGravity = false; // Let NavMeshAgent handle movement initially
-            rb.linearDamping = 2f;
-            rb.angularDamping = 5f;
+            rb.isKinematic = true;   // start in NavMeshAgent mode
+            rb.useGravity = false;   // let NavMesh handle ground alignment
+            rb.linearDamping = 2f;            // replaces linearDamping
+            rb.angularDamping = 5f;     // replaces angularDamping
             rb.mass = 1f;
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         }
     }
+
 
     void ForcePositionUpdate()
     {
@@ -328,30 +328,28 @@ public class BasicEnemyAI : MonoBehaviour
         if (isGrounded && !agent.enabled && !isLaunched)
         {
             NavMeshHit hit;
-            if (NavMesh.SamplePosition(transform.position, out hit, 2f, NavMesh.AllAreas))
+            if (NavMesh.SamplePosition(transform.position, out hit, 2f, NavMesh.AllAreas) ||
+                NavMesh.SamplePosition(lastGroundedPosition, out hit, 2f, NavMesh.AllAreas))
             {
-                // Switch back to kinematic for NavMeshAgent
+                // Switch back to NavMeshAgent
                 rb.isKinematic = true;
                 rb.useGravity = false;
 
-                // Warp to NavMesh position
+                // Snap to NavMesh surface
                 transform.position = hit.position;
                 agent.enabled = true;
                 agent.Warp(hit.position);
-            }
-            else if (NavMesh.SamplePosition(lastGroundedPosition, out hit, 2f, NavMesh.AllAreas))
-            {
-                rb.isKinematic = true;
-                rb.useGravity = false;
 
-                transform.position = hit.position;
-                agent.enabled = true;
-                agent.Warp(hit.position);
+                if (showDebugInfo)
+                {
+                    Debug.Log($"{gameObject.name} recovered on NavMesh at {hit.position}");
+                }
             }
         }
 
         isRecovering = false;
     }
+
 
     IEnumerator InvulnerabilityRoutine()
     {
