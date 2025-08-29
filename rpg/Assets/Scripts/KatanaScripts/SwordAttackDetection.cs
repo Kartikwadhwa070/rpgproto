@@ -179,23 +179,23 @@ public class SwordAttackDetection : MonoBehaviour
     }
 
     void OnDrawGizmos()
-    {
-        if (!showDebugGizmos || swordSystem == null || swordSystem.AttackOrigin == null) return;
+{
+    if (!showDebugGizmos || swordSystem == null || swordSystem.AttackOrigin == null) return;
 
-        Transform sword = swordSystem.AttackOrigin;
+    Transform sword = swordSystem.AttackOrigin;
 
-        Gizmos.color = gizmoColor;
+    Gizmos.color = gizmoColor;
 
-        // Define start and end points of the sword blade
-        Vector3 start = sword.position;
-        Vector3 end = sword.position + sword.forward * attackRange;
+    // Define start and end points of the sword blade
+    Vector3 start = sword.position;
+    Vector3 end = sword.position + sword.forward * attackRange;
 
-        // Draw a line for the blade path
-        Gizmos.DrawLine(start, end);
+    // Draw a line for the blade path
+    Gizmos.DrawLine(start, end);
 
-        // Draw a capsule-like hitbox
-        float bladeThickness = 0.2f; // adjust to match sword width
-        Gizmos.DrawWireSphere(start, bladeThickness);
-        Gizmos.DrawWireSphere(end, bladeThickness);
-    }
+    // Draw a capsule-like hitbox
+    float bladeThickness = 0.2f; // adjust to match sword width
+    Gizmos.DrawWireSphere(start, bladeThickness);
+    Gizmos.DrawWireSphere(end, bladeThickness);
+}
 }

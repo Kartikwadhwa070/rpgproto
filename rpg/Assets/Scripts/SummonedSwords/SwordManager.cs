@@ -243,32 +243,31 @@ public class FloatingSwordSystem : MonoBehaviour
     {
         isPerformingDramaticEntry = true;
 
-        Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
-
         // Phase 0: Fade in magic circle with dramatic effect
         if (circleController != null)
         {
             float circleFadeTime = 1f;
             float timer = 0f;
-            
+
             while (timer < circleFadeTime)
             {
                 timer += Time.deltaTime;
                 float normalizedTime = timer / circleFadeTime;
                 float curveValue = circleFadeCurve.Evaluate(normalizedTime);
-                
+
                 circleController.SetVisibility(curveValue);
                 circleController.SetGlowIntensity(circleGlowIntensity * curveValue);
-                
+
                 yield return null;
             }
-            
+
             circleController.SetVisibility(1f);
         }
 
         // Initialize all swords at circle position (invisible)
         for (int i = 0; i < swords.Count; i++)
         {
+            Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
             swords[i].SetBattleMode(true, 0f);
             swords[i].SetEntryPosition(circlePosition);
             swords[i].SetEntryGlow(0f);
@@ -280,7 +279,6 @@ public class FloatingSwordSystem : MonoBehaviour
         swords[0].SetBattleMode(true, 1f);
         swords[0].SetEntryGlow(swordGlowDuringEntry);
 
-        // Spin the first sword as it appears
         float spinTimer = 0f;
         float spinDuration = 1f;
         Quaternion initialRotation = swords[0].transform.rotation;
@@ -290,10 +288,10 @@ public class FloatingSwordSystem : MonoBehaviour
             spinTimer += Time.deltaTime;
             float normalizedTime = spinTimer / spinDuration;
             float spinAmount = entrySpinCurve.Evaluate(normalizedTime) * swordSpinDuringEntry;
-            
+
             Quaternion spinRotation = Quaternion.AngleAxis(spinAmount, Vector3.up);
             swords[0].transform.rotation = initialRotation * spinRotation;
-            
+
             yield return null;
         }
 
@@ -307,9 +305,11 @@ public class FloatingSwordSystem : MonoBehaviour
             duplicationTimer += Time.deltaTime;
             float normalizedTime = duplicationTimer / duplicationTime;
 
+            // Keep circle attached to player
+            Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
+
             for (int i = 1; i < swords.Count; i++)
             {
-                // Stagger each sword's appearance
                 float swordDelay = (float)(i - 1) / (swordCount - 1) * 0.7f;
                 float swordTime = Mathf.Clamp01((normalizedTime - swordDelay) * 1.5f);
 
@@ -318,7 +318,6 @@ public class FloatingSwordSystem : MonoBehaviour
                     swords[i].SetBattleMode(true, swordTime);
                     swords[i].SetEntryGlow(swordGlowDuringEntry * swordTime);
 
-                    // Spiral effect during duplication
                     if (useSpiralEntry)
                     {
                         float spiralAngle = swordTime * spiralTurns * 360f + (i * 60f);
@@ -330,7 +329,6 @@ public class FloatingSwordSystem : MonoBehaviour
                         swords[i].SetEntryPosition(circlePosition + spiralOffset);
                     }
 
-                    // Spin during entry
                     float spinAmount = entrySpinCurve.Evaluate(swordTime) * swordSpinDuringEntry * 2f;
                     Quaternion entrySpinRotation = Quaternion.AngleAxis(spinAmount + (i * 45f), Vector3.up);
                     swords[i].SetEntryRotation(entrySpinRotation);
@@ -343,6 +341,7 @@ public class FloatingSwordSystem : MonoBehaviour
         // Ensure all swords are fully visible
         for (int i = 0; i < swords.Count; i++)
         {
+            Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
             swords[i].SetBattleMode(true, 1f);
             swords[i].SetEntryPosition(circlePosition);
             swords[i].SetEntryGlow(swordGlowDuringEntry);
@@ -359,9 +358,11 @@ public class FloatingSwordSystem : MonoBehaviour
             float normalizedTime = spreadTimer / spreadToPositionTime;
             float curveValue = spreadCurve.Evaluate(normalizedTime);
 
+            // Circle follows player
+            Vector3 circlePosition = transform.position + Vector3.up * circleHeight;
+
             for (int i = 0; i < swords.Count; i++)
             {
-                // Calculate final position and rotation
                 float angle = (360f / swordCount) * i;
                 Vector3 finalOffset = new Vector3(
                     Mathf.Cos(angle * Mathf.Deg2Rad) * floatDistance,
@@ -371,12 +372,10 @@ public class FloatingSwordSystem : MonoBehaviour
                 Vector3 finalPosition = transform.position + finalOffset;
                 Quaternion finalRotation = CalculateSwordRotation(finalOffset, angle);
 
-                // Interpolate positions
                 Vector3 currentPos = Vector3.Lerp(circlePosition, finalPosition, curveValue);
                 swords[i].SetEntryPosition(currentPos);
                 swords[i].SetEntryRotation(Quaternion.Lerp(swords[i].transform.rotation, finalRotation, curveValue));
 
-                // Reduce glow as they spread out
                 float glowReduction = Mathf.Lerp(swordGlowDuringEntry, 0f, curveValue);
                 swords[i].SetEntryGlow(glowReduction);
             }
@@ -394,6 +393,7 @@ public class FloatingSwordSystem : MonoBehaviour
         isPerformingDramaticEntry = false;
         isBattleMode = true;
     }
+
 
     IEnumerator PerformEnhancedDramaticExit()
     {

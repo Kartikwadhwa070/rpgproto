@@ -2614,9 +2614,9 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 8
   enemyTag: Enemy
-  attackRange: 4.87
+  attackRange: 2
   attackAngle: 60
-  baseDamage: 25
+  baseDamage: 10
   launchForce: 15
   launchUpwardForce: 10
   launchDuration: 1.5
