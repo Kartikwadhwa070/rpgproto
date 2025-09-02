@@ -2801,6 +2801,8 @@ GameObject:
   - component: {fileID: 1887218738}
   - component: {fileID: 1887218739}
   - component: {fileID: 1887218740}
+  - component: {fileID: 1887218741}
+  - component: {fileID: 1887218742}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -3373,6 +3375,158 @@ MonoBehaviour:
   swordAppearSound: {fileID: 0}
   swordDisappearSound: {fileID: 0}
   audioSource: {fileID: 0}
+--- !u!114 &1887218741
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1887218728}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4ecb201785a58f4481f2bcbcec7db14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  attackRange: 15
+  numberOfSlashes: 5
+  slashInterval: 0.2
+  damage: 25
+  finalSlashDamage: 50
+  enemyLayerMask:
+    serializedVersion: 2
+    m_Bits: 8
+  teleportDuration: 0.1
+  pauseBeforeNextSlash: 0.1
+  finalPauseDuration: 0.3
+  teleportCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  slashEffectPrefab: {fileID: 0}
+  teleportEffectPrefab: {fileID: 0}
+  slashEffectDuration: 0.5
+  playerInvisibleMaterial: {fileID: 0}
+  invisibilityFlashDuration: 0.05
+  enableCameraShake: 1
+  cameraShakeIntensity: 0.5
+  cameraShakeDuration: 0.1
+  ultimateKey: 113
+  cooldownDuration: 0.44
+--- !u!114 &1887218742
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1887218728}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03c1347133669b04f81aa0d7f52513a7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  attackRange: 8
+  hitsPerEnemy: 6
+  damagePerHit: 15
+  dashDistance: 6
+  enemyLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  dashSpeed: 35
+  dashThroughDistance: 4
+  preSlashPause: 0.2
+  postSlashPause: 0.15
+  dashCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  minAngleVariation: 45
+  heightVariation: 2
+  groundOffset: 0.5
+  slashEffectPrefab: {fileID: 0}
+  teleportEffectPrefab: {fileID: 0}
+  slashEffectDuration: 0.3
+  trailColor: {r: 1, g: 0, b: 0, a: 1}
+  trailWidth: 0.32
+  teleportParticleCount: 20
+  teleportEffectRadius: 1.5
+  teleportColor1: {r: 0, g: 1, b: 1, a: 1}
+  teleportColor2: {r: 1, g: 1, b: 1, a: 1}
+  teleportFlashDuration: 0.15
+  enableCameraShake: 1
+  earthquakeIntensity: 1.2
+  earthquakeDuration: 0.25
+  verticalShakeMultiplier: 0.6
+  horizontalShakeMultiplier: 1.4
+  earthquakeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  shakeFrequency: 15
+  dashTrailColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  dashTrailWidth: 0.4
+  dashParticleCount: 15
+  orbitalAttackKey: 9
+  cooldownDuration: 3.28
 --- !u!4 &1948545902 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 803a8a63ee045324c8316d11b7bbbb42, type: 3}
