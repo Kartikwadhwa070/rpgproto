@@ -17,7 +17,7 @@ public class OrbitalSlashAttack : MonoBehaviour
     public float preSlashPause = 0.2f;
     public float postSlashPause = 0.15f;
     public AnimationCurve dashCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
-    public float maxWaitTime = 10f; // Maximum time to wait for input (no auto-dash)
+    public float inputTimeoutDuration = 2f; // Time to wait before canceling attack
 
     [Header("Hit Detection")]
     public float hitDetectionRadius = 2f; // Radius for hit detection
@@ -213,7 +213,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         return endPosition;
     }
 
-    // FIXED: Manual-only dash input with no timeout
+    // FIXED: Manual dash input with timeout that cancels the attack
     IEnumerator WaitForDashInput()
     {
         waitingForDashInput = true;
@@ -224,13 +224,28 @@ public class OrbitalSlashAttack : MonoBehaviour
             StartCoroutine(ShowDashPrompt());
         }
 
-        // Wait indefinitely for manual input (no timeout)
-        while (!dashInputReceived)
+        float timer = 0f;
+
+        // Wait for input with timeout
+        while (timer < inputTimeoutDuration && !dashInputReceived)
         {
+            timer += Time.deltaTime;
             yield return null;
         }
 
         waitingForDashInput = false;
+
+        // If timeout reached without input, cancel the entire attack
+        if (!dashInputReceived)
+        {
+            Debug.Log($"No dash input received within {inputTimeoutDuration} seconds. Canceling attack sequence.");
+
+            // Cancel the attack instead of continuing
+            StopAllCoroutines();
+            CancelAttack();
+            yield break; // Exit this coroutine
+        }
+
         Debug.Log("Dash input received!");
     }
 
@@ -249,11 +264,30 @@ public class OrbitalSlashAttack : MonoBehaviour
         promptObj.transform.LookAt(playerCamera.transform);
         promptObj.transform.Rotate(0, 180, 0);
 
-        // Keep prompt visible while waiting for input
-        while (waitingForDashInput)
+        float timer = 0f;
+
+        // Keep prompt visible while waiting for input, with timeout warning
+        while (waitingForDashInput && timer < inputTimeoutDuration)
         {
+            timer += Time.deltaTime;
+
+            // Change color to warning as timeout approaches
+            Color promptColor = Color.yellow;
+            if (timer > inputTimeoutDuration * 0.7f) // Last 30% of time
+            {
+                float warningIntensity = (timer - inputTimeoutDuration * 0.7f) / (inputTimeoutDuration * 0.3f);
+                promptColor = Color.Lerp(Color.yellow, Color.red, warningIntensity);
+            }
+
             float alpha = Mathf.PingPong(Time.time * 3f, 1f);
-            textMesh.color = new Color(Color.yellow.r, Color.yellow.g, Color.yellow.b, alpha);
+            textMesh.color = new Color(promptColor.r, promptColor.g, promptColor.b, alpha);
+
+            // Update text to show remaining time in last 2 seconds
+            if (timer > inputTimeoutDuration - 2f)
+            {
+                float timeLeft = inputTimeoutDuration - timer;
+                textMesh.text = $"{dashPromptText} ({timeLeft:F1}s)";
+            }
 
             // Update position to follow player
             promptObj.transform.position = transform.position + Vector3.up * 2f;
@@ -264,7 +298,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         }
 
         // Fade out quickly
-        float timer = 0f;
+        timer = 0f;
         Color originalColor = textMesh.color;
         while (timer < 0.2f)
         {
