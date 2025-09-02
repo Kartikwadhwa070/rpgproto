@@ -17,6 +17,11 @@ public class OrbitalSlashAttack : MonoBehaviour
     public float orbitHeight = 1f; // Height above enemy center
     public AnimationCurve speedCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
+    [Header("Randomization Settings")]
+    public float minTeleportDistance = 2f; // Minimum distance between teleport positions
+    public float maxRadiusVariation = 1.5f; // How much the radius can vary
+    public float heightVariation = 2f; // Vertical position randomness
+
     [Header("Visual Effects")]
     public GameObject slashEffectPrefab;
     public GameObject teleportEffectPrefab;
@@ -24,10 +29,19 @@ public class OrbitalSlashAttack : MonoBehaviour
     public Color trailColor = Color.red;
     public float trailWidth = 0.2f;
 
-    [Header("Camera Effects")]
+    [Header("Enhanced Teleportation Effects")]
+    public int teleportParticleCount = 20;
+    public float teleportEffectRadius = 1.5f;
+    public Color teleportColor1 = Color.cyan;
+    public Color teleportColor2 = Color.white;
+    public float teleportFlashDuration = 0.15f;
+
+    [Header("Intense Camera Effects")]
     public bool enableCameraShake = true;
-    public float cameraShakeIntensity = 0.3f;
-    public float cameraShakeDuration = 0.08f;
+    public float cameraShakeIntensity = 0.8f; // Increased intensity
+    public float cameraShakeDuration = 0.15f; // Longer duration
+    public float maxShakeRadius = 1.2f; // Maximum shake distance
+    public AnimationCurve shakeCurve = AnimationCurve.EaseInOut(0, 1, 1, 0);
 
     [Header("Input")]
     public KeyCode orbitalAttackKey = KeyCode.E;
@@ -48,7 +62,7 @@ public class OrbitalSlashAttack : MonoBehaviour
     private GameObject currentTarget;
     private Vector3 originalPosition;
     private int currentHitCount;
-    private float currentAngle;
+    private List<Vector3> usedPositions = new List<Vector3>();
 
     void Start()
     {
@@ -117,18 +131,53 @@ public class OrbitalSlashAttack : MonoBehaviour
         return nearest;
     }
 
-    Vector3 CalculateOrbitalPosition(Vector3 center, float angle)
+    Vector3 CalculateRandomOrbitalPosition(Vector3 center)
     {
-        float radians = angle * Mathf.Deg2Rad;
         Vector3 position = center;
-        position.x += Mathf.Cos(radians) * orbitalRadius;
-        position.z += Mathf.Sin(radians) * orbitalRadius;
+        bool validPosition = false;
+        int attempts = 0;
+        Vector3 candidatePosition = Vector3.zero;
 
-        // Add some vertical variation for more dynamic movement
-        float verticalOffset = Mathf.Sin(radians * 2f) * 0.5f;
-        position.y += verticalOffset;
+        while (!validPosition && attempts < 20)
+        {
+            // Random angle instead of incremental
+            float randomAngle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
 
-        return position;
+            // Random radius variation
+            float randomRadius = orbitalRadius + Random.Range(-maxRadiusVariation, maxRadiusVariation);
+            randomRadius = Mathf.Max(randomRadius, 1f); // Ensure minimum radius
+
+            candidatePosition = center;
+            candidatePosition.x += Mathf.Cos(randomAngle) * randomRadius;
+            candidatePosition.z += Mathf.Sin(randomAngle) * randomRadius;
+
+            // Random vertical variation
+            candidatePosition.y += Random.Range(-heightVariation, heightVariation);
+
+            // Check if this position is far enough from previous positions
+            validPosition = true;
+            foreach (Vector3 usedPos in usedPositions)
+            {
+                if (Vector3.Distance(candidatePosition, usedPos) < minTeleportDistance)
+                {
+                    validPosition = false;
+                    break;
+                }
+            }
+
+            attempts++;
+        }
+
+        // If we couldn't find a valid position, use the candidate anyway
+        usedPositions.Add(candidatePosition);
+
+        // Keep only recent positions to avoid infinite list growth
+        if (usedPositions.Count > hitsPerEnemy)
+        {
+            usedPositions.RemoveAt(0);
+        }
+
+        return candidatePosition;
     }
 
     IEnumerator TeleportToPosition(Vector3 targetPosition)
@@ -137,7 +186,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         float journeyDistance = Vector3.Distance(startPosition, targetPosition);
         float journeyTime = journeyDistance / teleportSpeed;
 
-        CreateTeleportEffect(startPosition);
+        CreateEnhancedTeleportEffect(startPosition, true); // Departure effect
 
         float timer = 0f;
         while (timer < journeyTime)
@@ -158,7 +207,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         transform.position = targetPosition;
         characterController.enabled = true;
 
-        CreateTeleportEffect(targetPosition);
+        CreateEnhancedTeleportEffect(targetPosition, false); // Arrival effect
     }
 
     void PerformSlash(GameObject target)
@@ -168,26 +217,33 @@ public class OrbitalSlashAttack : MonoBehaviour
         // Create slash effect
         CreateSlashEffect(target.transform.position);
 
-        // Camera shake
+        // Intense camera shake
         if (enableCameraShake && playerCamera != null)
         {
-            StartCoroutine(CameraShake());
+            StartCoroutine(IntenseCameraShake());
         }
 
         // Deal damage
         DealDamageToTarget(target, damagePerHit);
 
-        // Brief invisibility flash during slash
-        StartCoroutine(InvisibilityFlash());
+        // Enhanced invisibility flash with teleport effect
+        StartCoroutine(EnhancedInvisibilityFlash());
 
         Debug.Log($"Orbital hit {currentHitCount}/{hitsPerEnemy} on {target.name}");
     }
 
-    IEnumerator InvisibilityFlash()
+    IEnumerator EnhancedInvisibilityFlash()
     {
+        // Create brief teleport effect at current position
+        CreateEnhancedTeleportEffect(transform.position, false);
+
         SetPlayerVisibility(false);
-        yield return new WaitForSeconds(0.03f);
+        yield return new WaitForSeconds(0.05f);
         SetPlayerVisibility(true);
+
+        // Another brief effect when reappearing
+        yield return new WaitForSeconds(0.02f);
+        CreateEnhancedTeleportEffect(transform.position, false);
     }
 
     void SetPlayerVisibility(bool visible)
@@ -259,7 +315,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         Destroy(slashObject);
     }
 
-    void CreateTeleportEffect(Vector3 position)
+    void CreateEnhancedTeleportEffect(Vector3 position, bool isDeparture)
     {
         if (teleportEffectPrefab != null)
         {
@@ -268,37 +324,87 @@ public class OrbitalSlashAttack : MonoBehaviour
         }
         else
         {
-            CreateSimpleTeleportEffect(position);
+            CreateAdvancedTeleportEffect(position, isDeparture);
         }
     }
 
-    void CreateSimpleTeleportEffect(Vector3 position)
+    void CreateAdvancedTeleportEffect(Vector3 position, bool isDeparture)
     {
-        // Create expanding ring effect
-        for (int i = 0; i < 12; i++)
+        // Create expanding/contracting ring effect with more particles
+        for (int i = 0; i < teleportParticleCount; i++)
         {
             GameObject particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-            float angle = i * 30f * Mathf.Deg2Rad;
-            Vector3 direction = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-            particle.transform.position = position + direction * 0.2f;
-            particle.transform.localScale = Vector3.one * 0.05f;
+            float angle = (i / (float)teleportParticleCount) * 360f * Mathf.Deg2Rad;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), Random.Range(-0.3f, 0.8f), Mathf.Sin(angle)).normalized;
+
+            particle.transform.position = position + direction * 0.1f;
+            particle.transform.localScale = Vector3.one * Random.Range(0.03f, 0.08f);
 
             Renderer renderer = particle.GetComponent<Renderer>();
             renderer.material = new Material(Shader.Find("Sprites/Default"));
-            renderer.material.color = Color.blue;
+
+            // Randomize colors
+            Color particleColor = Color.Lerp(teleportColor1, teleportColor2, Random.Range(0f, 1f));
+            renderer.material.color = particleColor;
 
             Destroy(particle.GetComponent<Collider>());
-            StartCoroutine(AnimateTeleportParticle(particle, direction));
+            StartCoroutine(AnimateEnhancedTeleportParticle(particle, direction, isDeparture));
         }
+
+        // Add central energy burst
+        CreateEnergyBurst(position, isDeparture);
     }
 
-    IEnumerator AnimateTeleportParticle(GameObject particle, Vector3 direction)
+    void CreateEnergyBurst(Vector3 position, bool isDeparture)
+    {
+        GameObject burst = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        burst.transform.position = position;
+        burst.transform.localScale = Vector3.one * 0.1f;
+
+        Renderer renderer = burst.GetComponent<Renderer>();
+        renderer.material = new Material(Shader.Find("Sprites/Default"));
+        renderer.material.color = isDeparture ? teleportColor2 : teleportColor1;
+
+        Destroy(burst.GetComponent<Collider>());
+        StartCoroutine(AnimateEnergyBurst(burst, isDeparture));
+    }
+
+    IEnumerator AnimateEnergyBurst(GameObject burst, bool isDeparture)
+    {
+        Vector3 startScale = burst.transform.localScale;
+        Vector3 targetScale = isDeparture ? Vector3.one * 2f : Vector3.one * 0.5f;
+
+        Renderer renderer = burst.GetComponent<Renderer>();
+        Color originalColor = renderer.material.color;
+
+        float timer = 0f;
+        float duration = teleportFlashDuration;
+
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            float normalizedTime = timer / duration;
+
+            // Scale animation
+            burst.transform.localScale = Vector3.Lerp(startScale, targetScale, normalizedTime);
+
+            // Fade animation
+            float alpha = isDeparture ? (1f - normalizedTime) : Mathf.Sin(normalizedTime * Mathf.PI);
+            renderer.material.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
+
+            yield return null;
+        }
+
+        Destroy(burst);
+    }
+
+    IEnumerator AnimateEnhancedTeleportParticle(GameObject particle, Vector3 direction, bool isDeparture)
     {
         Vector3 startPos = particle.transform.position;
         Vector3 startScale = particle.transform.localScale;
         float timer = 0f;
-        float duration = 0.4f;
+        float duration = isDeparture ? 0.3f : 0.4f;
 
         Renderer renderer = particle.GetComponent<Renderer>();
         Color originalColor = renderer.material.color;
@@ -308,15 +414,31 @@ public class OrbitalSlashAttack : MonoBehaviour
             timer += Time.deltaTime;
             float normalizedTime = timer / duration;
 
-            // Move outward
-            particle.transform.position = startPos + direction * normalizedTime * 2f;
+            // Different movement patterns for departure vs arrival
+            if (isDeparture)
+            {
+                // Particles move outward and upward quickly
+                Vector3 movement = direction * normalizedTime * teleportEffectRadius * 2f;
+                movement.y += normalizedTime * normalizedTime * 3f; // Accelerating upward
+                particle.transform.position = startPos + movement;
+            }
+            else
+            {
+                // Particles spiral inward
+                Vector3 movement = direction * (1f - normalizedTime) * teleportEffectRadius;
+                float spiralY = Mathf.Sin(normalizedTime * Mathf.PI * 4f) * 0.5f;
+                movement.y += spiralY;
+                particle.transform.position = startPos + movement;
+            }
 
-            // Scale up then down
-            float scale = Mathf.Sin(normalizedTime * Mathf.PI) * 0.3f;
-            particle.transform.localScale = startScale + Vector3.one * scale;
+            // Dynamic scaling
+            float scaleMultiplier = isDeparture ? (1f + normalizedTime * 2f) : (1f + Mathf.Sin(normalizedTime * Mathf.PI) * 1.5f);
+            particle.transform.localScale = startScale * scaleMultiplier;
 
-            // Fade out
-            float alpha = 1f - normalizedTime;
+            // Enhanced fade with flickering
+            float baseAlpha = 1f - normalizedTime;
+            float flicker = Mathf.Sin(normalizedTime * 20f) * 0.3f + 0.7f;
+            float alpha = baseAlpha * flicker;
             renderer.material.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
 
             yield return null;
@@ -325,7 +447,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         Destroy(particle);
     }
 
-    IEnumerator CameraShake()
+    IEnumerator IntenseCameraShake()
     {
         if (playerCamera == null) yield break;
 
@@ -335,9 +457,28 @@ public class OrbitalSlashAttack : MonoBehaviour
         while (timer < cameraShakeDuration)
         {
             timer += Time.deltaTime;
+            float normalizedTime = timer / cameraShakeDuration;
 
-            Vector3 randomOffset = Random.insideUnitSphere * cameraShakeIntensity;
-            randomOffset.z = 0;
+            // Use curve to control shake intensity over time
+            float curveIntensity = shakeCurve.Evaluate(normalizedTime);
+            float currentIntensity = cameraShakeIntensity * curveIntensity;
+
+            // Create more varied shake patterns
+            Vector3 randomOffset = Vector3.zero;
+
+            // Primary shake (strong horizontal)
+            randomOffset.x = (Random.Range(-1f, 1f) * currentIntensity);
+            randomOffset.y = (Random.Range(-1f, 1f) * currentIntensity * 0.7f);
+
+            // Add secondary micro-shakes for more intensity
+            randomOffset.x += Random.Range(-0.1f, 0.1f) * currentIntensity * 3f;
+            randomOffset.y += Random.Range(-0.1f, 0.1f) * currentIntensity * 3f;
+
+            // Clamp to maximum radius
+            if (randomOffset.magnitude > maxShakeRadius)
+            {
+                randomOffset = randomOffset.normalized * maxShakeRadius;
+            }
 
             playerCamera.transform.localPosition = originalPosition + randomOffset;
             yield return null;
@@ -348,13 +489,6 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     void DealDamageToTarget(GameObject target, float damageAmount)
     {
-        // Try to find EnemyHP component (you'll add this later)
-        // EnemyHP enemyHP = target.GetComponent<EnemyHP>();
-        // if (enemyHP != null)
-        // {
-        //     enemyHP.TakeDamage(damageAmount);
-        // }
-
         Debug.Log($"Orbital hit! Dealt {damageAmount} damage to {target.name}!");
 
         // Try common damage methods
@@ -381,6 +515,7 @@ public class OrbitalSlashAttack : MonoBehaviour
     {
         isPerformingAttack = false;
         currentTarget = null;
+        usedPositions.Clear(); // Clear used positions for next attack
 
         // Re-enable player movement
         if (playerController != null)
@@ -403,7 +538,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         Debug.Log("Orbital attack ready!");
     }
 
-    // Main attack coroutine
+    // Main attack coroutine with randomized positioning
     IEnumerator PerformOrbitalAttack(GameObject target)
     {
         isPerformingAttack = true;
@@ -411,8 +546,9 @@ public class OrbitalSlashAttack : MonoBehaviour
         currentTarget = target;
         originalPosition = transform.position;
         currentHitCount = 0;
+        usedPositions.Clear(); // Reset position tracking
 
-        Debug.Log($"Starting Orbital Slash Attack on {target.name}!");
+        Debug.Log($"Starting Enhanced Orbital Slash Attack on {target.name}!");
 
         // Disable player movement
         if (playerController != null)
@@ -424,12 +560,11 @@ public class OrbitalSlashAttack : MonoBehaviour
 
         Vector3 targetCenter = target.transform.position + Vector3.up * orbitHeight;
 
-        // Initial teleport to starting position
-        float startAngle = Random.Range(0f, 360f);
-        Vector3 startPosition = CalculateOrbitalPosition(targetCenter, startAngle);
+        // Initial teleport to random starting position
+        Vector3 startPosition = CalculateRandomOrbitalPosition(targetCenter);
         yield return StartCoroutine(InstantTeleport(startPosition));
 
-        // Perform orbital slashes
+        // Perform randomized orbital slashes
         for (int i = 0; i < hitsPerEnemy; i++)
         {
             if (currentTarget == null) break;
@@ -437,29 +572,24 @@ public class OrbitalSlashAttack : MonoBehaviour
             // Recalculate center in case enemy moved
             targetCenter = currentTarget.transform.position + Vector3.up * orbitHeight;
 
-            // Calculate next orbital position
-            float angleIncrement = (360f / hitsPerEnemy);
-            float targetAngle = startAngle + (i * angleIncrement);
+            // Calculate next random orbital position
+            Vector3 nextPosition = CalculateRandomOrbitalPosition(targetCenter);
 
-            // Add some randomness to make it more dynamic
-            targetAngle += Random.Range(-15f, 15f);
-
-            Vector3 nextPosition = CalculateOrbitalPosition(targetCenter, targetAngle);
-
-            // Move to next position
-            yield return StartCoroutine(MoveToOrbitalPosition(nextPosition, targetCenter));
+            // Move to next position with enhanced effects
+            yield return StartCoroutine(MoveToRandomOrbitalPosition(nextPosition, targetCenter));
 
             // Perform slash
             PerformSlash(currentTarget);
 
-            // Brief pause
-            yield return new WaitForSeconds(hitPauseDuration);
+            // Randomized pause duration
+            float randomPause = hitPauseDuration + Random.Range(-0.05f, 0.05f);
+            yield return new WaitForSeconds(randomPause);
         }
 
         // Final dramatic pause
         yield return new WaitForSeconds(0.2f);
 
-        // Return to ground near enemy
+        // Return to ground near enemy with final teleport effect
         Vector3 finalPosition = currentTarget != null ?
             currentTarget.transform.position + (originalPosition - currentTarget.transform.position).normalized * 3f :
             originalPosition;
@@ -472,7 +602,7 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     IEnumerator InstantTeleport(Vector3 targetPosition)
     {
-        CreateTeleportEffect(transform.position);
+        CreateEnhancedTeleportEffect(transform.position, true);
         SetPlayerVisibility(false);
 
         characterController.enabled = false;
@@ -482,14 +612,17 @@ public class OrbitalSlashAttack : MonoBehaviour
         yield return new WaitForSeconds(0.1f);
 
         SetPlayerVisibility(true);
-        CreateTeleportEffect(targetPosition);
+        CreateEnhancedTeleportEffect(targetPosition, false);
     }
 
-    IEnumerator MoveToOrbitalPosition(Vector3 targetPosition, Vector3 lookAtTarget)
+    IEnumerator MoveToRandomOrbitalPosition(Vector3 targetPosition, Vector3 lookAtTarget)
     {
         Vector3 startPosition = transform.position;
         float journeyDistance = Vector3.Distance(startPosition, targetPosition);
         float journeyTime = journeyDistance / teleportSpeed;
+
+        // Add slight randomness to movement speed
+        journeyTime *= Random.Range(0.8f, 1.2f);
 
         float timer = 0f;
         while (timer < journeyTime)
@@ -499,6 +632,12 @@ public class OrbitalSlashAttack : MonoBehaviour
             float curveValue = speedCurve.Evaluate(normalizedTime);
 
             Vector3 currentPosition = Vector3.Lerp(startPosition, targetPosition, curveValue);
+
+            // Add slight movement wobble for more dynamic feel
+            Vector3 wobble = Vector3.zero;
+            wobble.x = Mathf.Sin(normalizedTime * 20f) * 0.1f;
+            wobble.y = Mathf.Cos(normalizedTime * 15f) * 0.05f;
+            currentPosition += wobble;
 
             characterController.enabled = false;
             transform.position = currentPosition;
@@ -535,19 +674,21 @@ public class OrbitalSlashAttack : MonoBehaviour
             Gizmos.color = Color.yellow;
             Vector3 center = currentTarget.transform.position + Vector3.up * orbitHeight;
 
-            // Draw orbital path
-            Vector3 previousPos = CalculateOrbitalPosition(center, 0f);
-            for (int i = 1; i <= 36; i++)
-            {
-                float angle = i * 10f;
-                Vector3 nextPos = CalculateOrbitalPosition(center, angle);
-                Gizmos.DrawLine(previousPos, nextPos);
-                previousPos = nextPos;
-            }
-
-            // Draw orbital radius
+            // Draw orbital range (min and max radius)
             Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(center, orbitalRadius);
+            Gizmos.DrawWireSphere(center, orbitalRadius - maxRadiusVariation);
+            Gizmos.color = Color.blue;
+            Gizmos.DrawWireSphere(center, orbitalRadius + maxRadiusVariation);
+
+            // Draw used positions if in attack
+            if (isPerformingAttack)
+            {
+                Gizmos.color = Color.magenta;
+                foreach (Vector3 pos in usedPositions)
+                {
+                    Gizmos.DrawWireSphere(pos, 0.3f);
+                }
+            }
         }
     }
 
