@@ -17,17 +17,27 @@ public class OrbitalSlashAttack : MonoBehaviour
     public float preSlashPause = 0.2f;
     public float postSlashPause = 0.15f;
     public AnimationCurve dashCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
-    public float inputTimeoutDuration = 2f; // Time to wait before canceling attack
+    public float inputTimeoutDuration = 2f;
 
     [Header("Hit Detection")]
-    public float hitDetectionRadius = 2f; // Radius for hit detection
-    public bool guaranteeHitOnDash = true; // Ensure every dash hits
-    public float hitEffectDelay = 0.1f; // Delay before applying damage for better timing
+    public float hitDetectionRadius = 2f;
+    public bool guaranteeHitOnDash = true;
+    public float hitEffectDelay = 0.1f;
 
     [Header("Positioning Settings")]
     public float minAngleVariation = 45f;
     public float heightVariation = 2f;
     public float groundOffset = 0.5f;
+
+    [Header("Audio Effects")]
+    public AudioSource audioSource;
+    public AudioClip teleportSFX;
+    public AudioClip slashHitSFX;
+    public AudioClip dashStartSFX;
+    public AudioClip attackStartSFX;
+    public AudioClip attackEndSFX;
+    public AudioClip promptSFX;
+    [Range(0f, 1f)] public float sfxVolume = 1f;
 
     [Header("Camera Following")]
     public bool enableCameraFollow = true;
@@ -49,6 +59,16 @@ public class OrbitalSlashAttack : MonoBehaviour
     public Color teleportColor1 = Color.cyan;
     public Color teleportColor2 = Color.white;
     public float teleportFlashDuration = 0.2f;
+
+    [Header("Enhanced Visual Improvements")]
+    public bool enableScreenDistortion = true;
+    public float distortionIntensity = 0.3f;
+    public bool enableTimeSlowEffect = true;
+    public float timeSlowFactor = 0.3f;
+    public float timeSlowDuration = 0.5f;
+    public bool enableLightningEffects = true;
+    public Color lightningColor = Color.blue;
+    public int lightningBoltCount = 8;
 
     [Header("Ground-Shaking Camera Effects")]
     public bool enableCameraShake = true;
@@ -77,16 +97,18 @@ public class OrbitalSlashAttack : MonoBehaviour
     [Header("Cooldown")]
     public float cooldownDuration = 8f;
 
-    // Private variables
+    // Cached components
     private PlayerController playerController;
     private CharacterController characterController;
     private Camera playerCamera;
-    private bool isPerformingAttack = false;
-    private bool canUseAttack = true;
     private Renderer[] playerRenderers;
     private TrailRenderer attackTrail;
+    private Transform cachedTransform;
 
-    // Attack state
+    // State management
+    private bool isPerformingAttack = false;
+    private bool canUseAttack = true;
+    private float cooldownStartTime;
     private GameObject currentTarget;
     private Vector3 originalPosition;
     private Vector3 originalCameraPosition;
@@ -97,37 +119,68 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     // Camera following
     private bool isCameraFollowing = false;
-    private Vector3 cameraTargetPosition;
-    private Coroutine cameraFollowCoroutine;
+
+    // UI Management
+    private GameObject currentPromptObject;
+    private Coroutine currentPromptCoroutine;
+
+    // Object pooling for effects
+    private readonly Queue<GameObject> slashEffectPool = new Queue<GameObject>();
+    private readonly Queue<GameObject> teleportEffectPool = new Queue<GameObject>();
+    private readonly Queue<GameObject> particlePool = new Queue<GameObject>();
+    private const int EFFECT_POOL_SIZE = 10;
+
+    // Cached materials and shaders
+    private static Material slashMaterial;
+    private static Material teleportMaterial;
+    private static Material lightningMaterial;
+    private static readonly int ColorProperty = Shader.PropertyToID("_Color");
+    private static readonly int AlphaProperty = Shader.PropertyToID("_Alpha");
+
+    // Wait instructions (reused)
+    private readonly WaitForSeconds preSlashWait;
+    private readonly WaitForSeconds postSlashWait;
+    private readonly WaitForSeconds teleportFlashWait;
+
+    // Damage system cache
+    private readonly Dictionary<System.Type, System.Reflection.MethodInfo> damageMethodCache = new Dictionary<System.Type, System.Reflection.MethodInfo>();
+
+    public OrbitalSlashAttack()
+    {
+        preSlashWait = new WaitForSeconds(preSlashPause);
+        postSlashWait = new WaitForSeconds(postSlashPause);
+        teleportFlashWait = new WaitForSeconds(teleportFlashDuration);
+    }
+
+    void Awake()
+    {
+        cachedTransform = transform;
+        InitializeComponents();
+        InitializeMaterials();
+        InitializeAudio();
+    }
 
     void Start()
     {
-        playerController = GetComponent<PlayerController>();
-        characterController = GetComponent<CharacterController>();
-        playerCamera = Camera.main;
-        if (playerCamera == null)
-            playerCamera = FindObjectOfType<Camera>();
-
-        if (playerCamera != null)
-            originalCameraPosition = playerCamera.transform.localPosition;
-
         playerRenderers = GetComponentsInChildren<Renderer>();
         SetupTrailRenderer();
+        InitializeEffectPools();
     }
 
     void Update()
     {
+        HandleInput();
+    }
+
+    void HandleInput()
+    {
         // Start attack
         if (Input.GetKeyDown(orbitalAttackKey) && canUseAttack && !isPerformingAttack)
         {
-            GameObject nearestEnemy = FindNearestEnemy();
+            var nearestEnemy = FindNearestEnemy();
             if (nearestEnemy != null)
             {
                 StartCoroutine(PerformDashSlashAttack(nearestEnemy));
-            }
-            else
-            {
-                Debug.Log("No enemies in range for dash slash attack!");
             }
         }
 
@@ -136,20 +189,98 @@ public class OrbitalSlashAttack : MonoBehaviour
         {
             dashInputReceived = true;
             waitingForDashInput = false;
+            PlaySFX(dashStartSFX);
         }
 
         // Cancel attack
         if (isPerformingAttack && Input.GetKeyDown(cancelAttackKey))
         {
-            StopAllCoroutines();
             CancelAttack();
+        }
+    }
+
+    void InitializeComponents()
+    {
+        playerController = GetComponent<PlayerController>();
+        characterController = GetComponent<CharacterController>();
+        playerCamera = Camera.main ?? FindObjectOfType<Camera>();
+
+        if (playerCamera != null)
+            originalCameraPosition = playerCamera.transform.localPosition;
+    }
+
+    void InitializeAudio()
+    {
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0.7f; // 3D sound
+            }
+        }
+    }
+
+    void InitializeMaterials()
+    {
+        if (slashMaterial == null)
+        {
+            slashMaterial = new Material(Shader.Find("Sprites/Default"))
+            {
+                color = Color.red
+            };
+        }
+
+        if (teleportMaterial == null)
+        {
+            teleportMaterial = new Material(Shader.Find("Sprites/Default"))
+            {
+                color = teleportColor1
+            };
+        }
+
+        if (lightningMaterial == null)
+        {
+            lightningMaterial = new Material(Shader.Find("Sprites/Default"))
+            {
+                color = lightningColor
+            };
+        }
+    }
+
+    void InitializeEffectPools()
+    {
+        for (int i = 0; i < EFFECT_POOL_SIZE; i++)
+        {
+            if (slashEffectPrefab != null)
+            {
+                var obj = Instantiate(slashEffectPrefab);
+                obj.SetActive(false);
+                slashEffectPool.Enqueue(obj);
+            }
+
+            if (teleportEffectPrefab != null)
+            {
+                var obj = Instantiate(teleportEffectPrefab);
+                obj.SetActive(false);
+                teleportEffectPool.Enqueue(obj);
+            }
+
+            // Pre-create particle objects
+            var particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            particle.transform.localScale = Vector3.one * 0.1f;
+            Destroy(particle.GetComponent<Collider>());
+            particle.SetActive(false);
+            particlePool.Enqueue(particle);
         }
     }
 
     void SetupTrailRenderer()
     {
-        GameObject trailObject = new GameObject("AttackTrail");
-        trailObject.transform.SetParent(transform);
+        var trailObject = new GameObject("AttackTrail");
+        trailObject.transform.SetParent(cachedTransform);
         trailObject.transform.localPosition = Vector3.zero;
 
         attackTrail = trailObject.AddComponent<TrailRenderer>();
@@ -164,18 +295,21 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     GameObject FindNearestEnemy()
     {
-        Collider[] colliders = Physics.OverlapSphere(transform.position, attackRange, enemyLayerMask);
-        GameObject nearest = null;
-        float nearestDistance = float.MaxValue;
+        var colliders = new Collider[20];
+        int count = Physics.OverlapSphereNonAlloc(cachedTransform.position, attackRange, colliders, enemyLayerMask);
 
-        foreach (Collider col in colliders)
+        GameObject nearest = null;
+        float nearestSqrDistance = float.MaxValue;
+
+        for (int i = 0; i < count; i++)
         {
+            var col = colliders[i];
             if (col.gameObject != gameObject && col.CompareTag("Enemy"))
             {
-                float distance = Vector3.Distance(transform.position, col.transform.position);
-                if (distance < nearestDistance)
+                float sqrDistance = (col.transform.position - cachedTransform.position).sqrMagnitude;
+                if (sqrDistance < nearestSqrDistance)
                 {
-                    nearestDistance = distance;
+                    nearestSqrDistance = sqrDistance;
                     nearest = col.gameObject;
                 }
             }
@@ -186,8 +320,6 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     Vector3 CalculateRandomDashStartPosition(Vector3 enemyCenter)
     {
-        Vector3 position = enemyCenter;
-
         float newAngle;
         do
         {
@@ -198,6 +330,7 @@ public class OrbitalSlashAttack : MonoBehaviour
         lastTeleportAngle = newAngle;
         float radians = newAngle * Mathf.Deg2Rad;
 
+        var position = enemyCenter;
         position.x += Mathf.Cos(radians) * dashDistance;
         position.z += Mathf.Sin(radians) * dashDistance;
         position.y = enemyCenter.y + groundOffset + Random.Range(-heightVariation * 0.3f, heightVariation);
@@ -207,26 +340,27 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     Vector3 CalculateDashThroughPosition(Vector3 startPos, Vector3 enemyPos)
     {
-        Vector3 dashDirection = (enemyPos - startPos).normalized;
-        Vector3 endPosition = enemyPos + dashDirection * dashThroughDistance;
+        var dashDirection = (enemyPos - startPos).normalized;
+        var endPosition = enemyPos + dashDirection * dashThroughDistance;
         endPosition.y = startPos.y;
         return endPosition;
     }
 
-    // FIXED: Manual dash input with timeout that cancels the attack
+    // FIXED: Proper UI cleanup and timeout handling
     IEnumerator WaitForDashInput()
     {
         waitingForDashInput = true;
         dashInputReceived = false;
 
+        PlaySFX(promptSFX);
+
         if (showDashPrompt)
         {
-            StartCoroutine(ShowDashPrompt());
+            currentPromptCoroutine = StartCoroutine(ShowDashPrompt());
         }
 
         float timer = 0f;
 
-        // Wait for input with timeout
         while (timer < inputTimeoutDuration && !dashInputReceived)
         {
             timer += Time.deltaTime;
@@ -235,91 +369,119 @@ public class OrbitalSlashAttack : MonoBehaviour
 
         waitingForDashInput = false;
 
-        // If timeout reached without input, cancel the entire attack
-        if (!dashInputReceived)
+        // FIXED: Ensure prompt cleanup regardless of outcome
+        if (currentPromptCoroutine != null)
         {
-            Debug.Log($"No dash input received within {inputTimeoutDuration} seconds. Canceling attack sequence.");
-
-            // Cancel the attack instead of continuing
-            StopAllCoroutines();
-            CancelAttack();
-            yield break; // Exit this coroutine
+            StopCoroutine(currentPromptCoroutine);
+            currentPromptCoroutine = null;
         }
 
-        Debug.Log("Dash input received!");
+        CleanupPromptUI();
+
+        if (!dashInputReceived)
+        {
+            Debug.Log($"No dash input received within {inputTimeoutDuration} seconds. Canceling attack.");
+            CancelAttack();
+            yield break;
+        }
     }
 
+    // FIXED: Proper UI management with cleanup
     IEnumerator ShowDashPrompt()
     {
-        Debug.Log(dashPromptText);
+        CleanupPromptUI(); // Ensure no existing prompt
 
-        GameObject promptObj = new GameObject("DashPrompt");
-        TextMesh textMesh = promptObj.AddComponent<TextMesh>();
+        currentPromptObject = new GameObject("DashPrompt");
+        var textMesh = currentPromptObject.AddComponent<TextMesh>();
         textMesh.text = dashPromptText;
         textMesh.fontSize = 20;
         textMesh.color = Color.yellow;
         textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.characterSize = 0.1f;
 
-        promptObj.transform.position = transform.position + Vector3.up * 2f;
-        promptObj.transform.LookAt(playerCamera.transform);
-        promptObj.transform.Rotate(0, 180, 0);
+        currentPromptObject.transform.position = cachedTransform.position + Vector3.up * 2f;
+
+        if (playerCamera != null)
+        {
+            currentPromptObject.transform.LookAt(playerCamera.transform);
+            currentPromptObject.transform.Rotate(0, 180, 0);
+        }
 
         float timer = 0f;
+        var originalColor = textMesh.color;
 
-        // Keep prompt visible while waiting for input, with timeout warning
-        while (waitingForDashInput && timer < inputTimeoutDuration)
+        while (waitingForDashInput && timer < inputTimeoutDuration && currentPromptObject != null)
         {
             timer += Time.deltaTime;
 
-            // Change color to warning as timeout approaches
-            Color promptColor = Color.yellow;
-            if (timer > inputTimeoutDuration * 0.7f) // Last 30% of time
+            // Update position and rotation
+            if (currentPromptObject != null && playerCamera != null)
             {
-                float warningIntensity = (timer - inputTimeoutDuration * 0.7f) / (inputTimeoutDuration * 0.3f);
-                promptColor = Color.Lerp(Color.yellow, Color.red, warningIntensity);
+                currentPromptObject.transform.position = cachedTransform.position + Vector3.up * 2f;
+                currentPromptObject.transform.LookAt(playerCamera.transform);
+                currentPromptObject.transform.Rotate(0, 180, 0);
+
+                // Pulsing effect
+                float alpha = 0.7f + 0.3f * Mathf.Sin(Time.time * 5f);
+
+                // Warning color as timeout approaches
+                if (timer > inputTimeoutDuration * 0.7f)
+                {
+                    float warningIntensity = (timer - inputTimeoutDuration * 0.7f) / (inputTimeoutDuration * 0.3f);
+                    var warningColor = Color.Lerp(Color.yellow, Color.red, warningIntensity);
+                    textMesh.color = new Color(warningColor.r, warningColor.g, warningColor.b, alpha);
+
+                    // Show countdown in last 2 seconds
+                    if (timer > inputTimeoutDuration - 2f)
+                    {
+                        float timeLeft = inputTimeoutDuration - timer;
+                        textMesh.text = $"{dashPromptText} ({timeLeft:F1}s)";
+                    }
+                }
+                else
+                {
+                    textMesh.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
+                }
             }
-
-            float alpha = Mathf.PingPong(Time.time * 3f, 1f);
-            textMesh.color = new Color(promptColor.r, promptColor.g, promptColor.b, alpha);
-
-            // Update text to show remaining time in last 2 seconds
-            if (timer > inputTimeoutDuration - 2f)
-            {
-                float timeLeft = inputTimeoutDuration - timer;
-                textMesh.text = $"{dashPromptText} ({timeLeft:F1}s)";
-            }
-
-            // Update position to follow player
-            promptObj.transform.position = transform.position + Vector3.up * 2f;
-            promptObj.transform.LookAt(playerCamera.transform);
-            promptObj.transform.Rotate(0, 180, 0);
 
             yield return null;
         }
 
-        // Fade out quickly
-        timer = 0f;
-        Color originalColor = textMesh.color;
-        while (timer < 0.2f)
+        // Fade out
+        if (currentPromptObject != null)
         {
-            timer += Time.deltaTime;
-            float alpha = 1f - (timer / 0.2f);
-            textMesh.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
-            yield return null;
+            var fadeTimer = 0f;
+            var fadeColor = textMesh.color;
+
+            while (fadeTimer < 0.2f && currentPromptObject != null)
+            {
+                fadeTimer += Time.deltaTime;
+                float alpha = 1f - (fadeTimer / 0.2f);
+                textMesh.color = new Color(fadeColor.r, fadeColor.g, fadeColor.b, alpha);
+                yield return null;
+            }
         }
 
-        Destroy(promptObj);
+        CleanupPromptUI();
     }
 
-    // FIXED: Improved hit detection with guaranteed hits
+    void CleanupPromptUI()
+    {
+        if (currentPromptObject != null)
+        {
+            DestroyImmediate(currentPromptObject);
+            currentPromptObject = null;
+        }
+    }
+
     IEnumerator DashThroughEnemy(Vector3 startPos, Vector3 endPos, GameObject target)
     {
-        Vector3 currentPos = startPos;
         float journeyDistance = Vector3.Distance(startPos, endPos);
         float journeyTime = journeyDistance / dashSpeed;
 
         StartCoroutine(SmoothCameraFollow(startPos));
 
+        // Setup dash trail
         if (attackTrail != null)
         {
             attackTrail.startColor = dashTrailColor;
@@ -327,9 +489,14 @@ public class OrbitalSlashAttack : MonoBehaviour
             attackTrail.startWidth = dashTrailWidth;
         }
 
+        // Time slow effect
+        if (enableTimeSlowEffect)
+        {
+            StartCoroutine(TimeSlowEffect());
+        }
+
         float timer = 0f;
         bool hasDealtDamage = false;
-        Vector3 enemyPos = target != null ? target.transform.position : Vector3.zero;
 
         while (timer < journeyTime)
         {
@@ -337,73 +504,61 @@ public class OrbitalSlashAttack : MonoBehaviour
             float normalizedTime = timer / journeyTime;
             float curveValue = dashCurve.Evaluate(normalizedTime);
 
-            Vector3 newPosition = Vector3.Lerp(startPos, endPos, curveValue);
+            var newPosition = Vector3.Lerp(startPos, endPos, curveValue);
 
+            // Efficient position update
             characterController.enabled = false;
-            transform.position = newPosition;
+            cachedTransform.position = newPosition;
             characterController.enabled = true;
 
+            // Camera follow
             if (isCameraFollowing)
             {
                 UpdateCameraFollowDuringDash(newPosition);
             }
 
-            Vector3 moveDirection = (endPos - startPos).normalized;
-            if (moveDirection != Vector3.zero)
+            // Rotation
+            var moveDirection = (endPos - startPos).normalized;
+            if (moveDirection.sqrMagnitude > 0.001f)
             {
-                transform.rotation = Quaternion.LookRotation(moveDirection);
+                cachedTransform.rotation = Quaternion.LookRotation(moveDirection);
             }
 
-            // IMPROVED HIT DETECTION: Check multiple methods
+            // Hit detection
             if (!hasDealtDamage && target != null)
             {
-                bool shouldHit = false;
-
-                if (guaranteeHitOnDash)
-                {
-                    // Guarantee hit when passing through the middle of the dash
-                    if (normalizedTime >= 0.4f && normalizedTime <= 0.7f)
-                    {
-                        shouldHit = true;
-                    }
-                }
-                else
-                {
-                    // Distance-based detection with larger radius
-                    float distanceToEnemy = Vector3.Distance(transform.position, target.transform.position);
-                    if (distanceToEnemy < hitDetectionRadius)
-                    {
-                        shouldHit = true;
-                    }
-                }
+                bool shouldHit = guaranteeHitOnDash ?
+                    (normalizedTime >= 0.4f && normalizedTime <= 0.7f) :
+                    Vector3.Distance(cachedTransform.position, target.transform.position) < hitDetectionRadius;
 
                 if (shouldHit)
                 {
                     hasDealtDamage = true;
-                    // Add a small delay for better visual timing
                     StartCoroutine(DelayedHitEffect(target, hitEffectDelay));
                 }
             }
 
-            if (Random.Range(0f, 1f) < 0.3f)
+            // Particle effects
+            if (Random.value < 0.3f)
             {
-                CreateDashParticle(transform.position);
+                CreateDashParticle(cachedTransform.position);
             }
 
             yield return null;
         }
 
+        // Final position
         characterController.enabled = false;
-        transform.position = endPos;
+        cachedTransform.position = endPos;
         characterController.enabled = true;
 
-        // FALLBACK: If somehow no damage was dealt, force it now
+        // Fallback damage
         if (!hasDealtDamage && target != null)
         {
-            Debug.Log("Fallback hit detection triggered!");
             StartCoroutine(DelayedHitEffect(target, 0f));
         }
 
+        // Reset trail
         if (attackTrail != null)
         {
             attackTrail.startColor = trailColor;
@@ -412,152 +567,172 @@ public class OrbitalSlashAttack : MonoBehaviour
         }
     }
 
-    // NEW: Delayed hit effect for better timing
     IEnumerator DelayedHitEffect(GameObject target, float delay)
     {
         if (delay > 0f)
             yield return new WaitForSeconds(delay);
 
-        if (target != null) // Check target still exists
+        if (target != null)
         {
             PerformSlash(target);
         }
     }
 
-    // IMPROVED: Better damage detection with multiple fallback methods
     void PerformSlash(GameObject target)
     {
         currentHitCount++;
 
         CreateSlashEffect(target.transform.position);
+        PlaySFX(slashHitSFX);
 
         if (enableCameraShake && playerCamera != null)
         {
             StartCoroutine(GroundMovingCameraShake());
         }
 
-        // IMPROVED DAMAGE SYSTEM: Try multiple methods with better error handling
-        bool damageDealt = TryDealDamage(target, damagePerHit);
-
-        if (!damageDealt)
+        if (enableLightningEffects)
         {
-            Debug.LogWarning($"Could not deal damage to {target.name} - no compatible damage system found!");
-            // You might want to add a default damage system here
+            CreateLightningEffect(target.transform.position);
         }
 
+        bool damageDealt = TryDealDamage(target, damagePerHit);
         StartCoroutine(SlashInvisibilityFlash());
 
-        Debug.Log($"Dash slash hit {currentHitCount}/{hitsPerEnemy} on {target.name} - Damage dealt: {damageDealt}");
+        Debug.Log($"Dash slash hit {currentHitCount}/{hitsPerEnemy} on {target.name} - Damage: {damageDealt}");
     }
 
-    // NEW: Improved damage dealing with multiple fallback methods
+    // Enhanced damage system with caching
     bool TryDealDamage(GameObject target, float damageAmount)
     {
-        // Method 1: Try standard TakeDamage
-        MonoBehaviour[] components = target.GetComponents<MonoBehaviour>();
-        foreach (MonoBehaviour component in components)
+        var components = target.GetComponents<MonoBehaviour>();
+
+        for (int i = 0; i < components.Length; i++)
         {
-            var takeDamageMethod = component.GetType().GetMethod("TakeDamage");
-            if (takeDamageMethod != null)
+            var component = components[i];
+            var type = component.GetType();
+
+            // Check cache first
+            if (damageMethodCache.TryGetValue(type, out var cachedMethod))
+            {
+                if (cachedMethod != null)
+                {
+                    try
+                    {
+                        cachedMethod.Invoke(component, new object[] { damageAmount });
+                        return true;
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning($"Cached damage method failed: {e.Message}");
+                        damageMethodCache[type] = null; // Invalidate cache
+                    }
+                }
+                continue;
+            }
+
+            // Find and cache damage method
+            var method = type.GetMethod("TakeDamage") ??
+                        type.GetMethod("Damage") ??
+                        type.GetMethod("ReceiveDamage");
+
+            damageMethodCache[type] = method;
+
+            if (method != null)
             {
                 try
                 {
-                    takeDamageMethod.Invoke(component, new object[] { damageAmount });
+                    method.Invoke(component, new object[] { damageAmount });
                     return true;
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogWarning($"TakeDamage method failed on {component.GetType().Name}: {e.Message}");
+                    Debug.LogWarning($"Damage method failed: {e.Message}");
                 }
             }
         }
 
-        // Method 2: Try Damage method
-        foreach (MonoBehaviour component in components)
-        {
-            var damageMethod = component.GetType().GetMethod("Damage");
-            if (damageMethod != null)
-            {
-                try
-                {
-                    damageMethod.Invoke(component, new object[] { damageAmount });
-                    return true;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"Damage method failed on {component.GetType().Name}: {e.Message}");
-                }
-            }
-        }
-
-        // Method 3: Try ReceiveDamage
-        foreach (MonoBehaviour component in components)
-        {
-            var receiveDamageMethod = component.GetType().GetMethod("ReceiveDamage");
-            if (receiveDamageMethod != null)
-            {
-                try
-                {
-                    receiveDamageMethod.Invoke(component, new object[] { damageAmount });
-                    return true;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"ReceiveDamage method failed on {component.GetType().Name}: {e.Message}");
-                }
-            }
-        }
-
-        // Method 4: Try Health component directly
-        var healthComponent = target.GetComponent<MonoBehaviour>();
-        if (healthComponent != null)
-        {
-            var healthField = healthComponent.GetType().GetField("health");
-            var currentHealthField = healthComponent.GetType().GetField("currentHealth");
-
-            if (healthField != null && healthField.FieldType == typeof(float))
-            {
-                try
-                {
-                    float currentHealth = (float)healthField.GetValue(healthComponent);
-                    healthField.SetValue(healthComponent, currentHealth - damageAmount);
-                    Debug.Log($"Direct health modification: {currentHealth} -> {currentHealth - damageAmount}");
-                    return true;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"Direct health modification failed: {e.Message}");
-                }
-            }
-
-            if (currentHealthField != null && currentHealthField.FieldType == typeof(float))
-            {
-                try
-                {
-                    float currentHealth = (float)currentHealthField.GetValue(healthComponent);
-                    currentHealthField.SetValue(healthComponent, currentHealth - damageAmount);
-                    Debug.Log($"Direct currentHealth modification: {currentHealth} -> {currentHealth - damageAmount}");
-                    return true;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"Direct currentHealth modification failed: {e.Message}");
-                }
-            }
-        }
-
-        // Method 5: Send Unity message (works with SendMessage receivers)
+        // Fallback: SendMessage
         try
         {
             target.SendMessage("TakeDamage", damageAmount, SendMessageOptions.DontRequireReceiver);
-            return true; // Assume it worked since SendMessage doesn't throw for DontRequireReceiver
+            return true;
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"SendMessage TakeDamage failed: {e.Message}");
+            Debug.LogWarning($"SendMessage failed: {e.Message}");
         }
 
-        return false; // No damage method found
+        return false;
+    }
+
+    // NEW: Time slow visual effect
+    IEnumerator TimeSlowEffect()
+    {
+        Time.timeScale = timeSlowFactor;
+        yield return new WaitForSecondsRealtime(timeSlowDuration);
+
+        // Gradually return to normal speed
+        float timer = 0f;
+        float returnDuration = 0.2f;
+
+        while (timer < returnDuration)
+        {
+            timer += Time.unscaledDeltaTime;
+            Time.timeScale = Mathf.Lerp(timeSlowFactor, 1f, timer / returnDuration);
+            yield return null;
+        }
+
+        Time.timeScale = 1f;
+    }
+
+    // NEW: Lightning effects
+    void CreateLightningEffect(Vector3 position)
+    {
+        for (int i = 0; i < lightningBoltCount; i++)
+        {
+            var lightning = new GameObject("Lightning");
+            lightning.transform.position = position;
+
+            var lr = lightning.AddComponent<LineRenderer>();
+            lr.material = lightningMaterial;
+            lr.startColor = lightningColor;
+            lr.endColor = Color.white;
+            lr.startWidth = 0.05f;
+            lr.endWidth = 0.02f;
+            lr.positionCount = 8;
+
+            // Create jagged lightning path
+            var start = position + Vector3.up * 2f;
+            var end = position + Random.insideUnitSphere * 3f;
+
+            for (int j = 0; j < 8; j++)
+            {
+                float t = j / 7f;
+                var point = Vector3.Lerp(start, end, t);
+                point += Random.insideUnitSphere * 0.5f * (1f - t);
+                lr.SetPosition(j, point);
+            }
+
+            StartCoroutine(AnimateLightning(lightning, lr));
+        }
+    }
+
+    IEnumerator AnimateLightning(GameObject lightning, LineRenderer lr)
+    {
+        float timer = 0f;
+        float duration = 0.1f;
+        var originalColor = lr.startColor;
+
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            float flicker = Random.value;
+            lr.startColor = originalColor * flicker;
+            lr.endColor = Color.white * flicker;
+            yield return null;
+        }
+
+        Destroy(lightning);
     }
 
     IEnumerator SlashInvisibilityFlash()
@@ -573,21 +748,24 @@ public class OrbitalSlashAttack : MonoBehaviour
 
     void SetPlayerVisibility(bool visible)
     {
-        foreach (Renderer renderer in playerRenderers)
+        for (int i = 0; i < playerRenderers.Length; i++)
         {
-            if (renderer != null)
+            if (playerRenderers[i] != null)
             {
-                renderer.enabled = visible;
+                playerRenderers[i].enabled = visible;
             }
         }
     }
 
     void CreateSlashEffect(Vector3 position)
     {
-        if (slashEffectPrefab != null)
+        if (slashEffectPrefab != null && slashEffectPool.Count > 0)
         {
-            GameObject effect = Instantiate(slashEffectPrefab, position, transform.rotation);
-            Destroy(effect, slashEffectDuration);
+            var effect = slashEffectPool.Dequeue();
+            effect.transform.position = position;
+            effect.transform.rotation = cachedTransform.rotation;
+            effect.SetActive(true);
+            StartCoroutine(ReturnEffectToPool(effect, slashEffectPool, slashEffectDuration));
         }
         else
         {
@@ -599,20 +777,20 @@ public class OrbitalSlashAttack : MonoBehaviour
     {
         for (int i = 0; i < 3; i++)
         {
-            GameObject slashLine = new GameObject("DashSlashEffect");
+            var slashLine = new GameObject("DashSlashEffect");
             slashLine.transform.position = position;
 
-            LineRenderer lr = slashLine.AddComponent<LineRenderer>();
-            lr.material = new Material(Shader.Find("Sprites/Default"));
+            var lr = slashLine.AddComponent<LineRenderer>();
+            lr.material = slashMaterial;
             lr.startColor = Color.red;
             lr.endColor = Color.yellow;
             lr.startWidth = 0.2f;
             lr.endWidth = 0.1f;
             lr.positionCount = 2;
 
-            Vector3 slashDirection = Quaternion.Euler(0, Random.Range(-30f, 30f), 0) * transform.forward;
-            Vector3 slashStart = position + slashDirection * 1.5f + Vector3.up * Random.Range(0.2f, 1f);
-            Vector3 slashEnd = position - slashDirection * 1.5f + Vector3.up * Random.Range(0.2f, 1f);
+            var slashDirection = Quaternion.Euler(0, Random.Range(-30f, 30f), 0) * cachedTransform.forward;
+            var slashStart = position + slashDirection * 1.5f + Vector3.up * Random.Range(0.2f, 1f);
+            var slashEnd = position - slashDirection * 1.5f + Vector3.up * Random.Range(0.2f, 1f);
 
             lr.SetPosition(0, slashStart);
             lr.SetPosition(1, slashEnd);
@@ -626,8 +804,8 @@ public class OrbitalSlashAttack : MonoBehaviour
         yield return new WaitForSeconds(delay);
 
         float timer = 0f;
-        Color originalStartColor = lr.startColor;
-        Color originalEndColor = lr.endColor;
+        var originalStartColor = lr.startColor;
+        var originalEndColor = lr.endColor;
 
         while (timer < slashEffectDuration)
         {
@@ -642,14 +820,21 @@ public class OrbitalSlashAttack : MonoBehaviour
         Destroy(slashObject);
     }
 
-    // [Rest of the methods remain the same - camera follow, teleport effects, etc.]
+    IEnumerator ReturnEffectToPool(GameObject effect, Queue<GameObject> pool, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        effect.SetActive(false);
+        pool.Enqueue(effect);
+    }
+
+    // [Camera and teleport methods remain similar but optimized]
     IEnumerator SmoothCameraFollow(Vector3 targetPosition)
     {
         if (!enableCameraFollow || playerCamera == null) yield break;
 
-        Vector3 startPosition = playerCamera.transform.position;
-        Vector3 directionToPlayer = (targetPosition - currentTarget.transform.position).normalized;
-        Vector3 idealCameraPosition = targetPosition - directionToPlayer * cameraFollowDistance;
+        var startPosition = playerCamera.transform.position;
+        var directionToPlayer = (targetPosition - currentTarget.transform.position).normalized;
+        var idealCameraPosition = targetPosition - directionToPlayer * cameraFollowDistance;
         idealCameraPosition.y = targetPosition.y + cameraHeightOffset;
 
         float timer = 0f;
@@ -661,533 +846,512 @@ public class OrbitalSlashAttack : MonoBehaviour
             float normalizedTime = timer / duration;
             float curveValue = cameraFollowCurve.Evaluate(normalizedTime);
 
-            Vector3 currentCameraPos = Vector3.Lerp(startPosition, idealCameraPosition, curveValue);
-            playerCamera.transform.position = currentCameraPos;
-
-            Vector3 lookDirection = (targetPosition - playerCamera.transform.position).normalized;
-            if (lookDirection != Vector3.zero)
-            {
-                Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-                playerCamera.transform.rotation = Quaternion.Lerp(playerCamera.transform.rotation, targetRotation, curveValue);
-            }
-
-            yield return null;
-        }
-    }
-
-    void UpdateCameraFollowDuringDash(Vector3 playerPosition)
-    {
-        if (!enableCameraFollow || playerCamera == null || currentTarget == null) return;
-
-        Vector3 directionToPlayer = (playerPosition - currentTarget.transform.position).normalized;
-        Vector3 idealCameraPosition = playerPosition - directionToPlayer * cameraFollowDistance;
-        idealCameraPosition.y = playerPosition.y + cameraHeightOffset;
-
-        Vector3 currentCameraPos = Vector3.Lerp(
+            var currentCameraPos = Vector3.Lerp(
             playerCamera.transform.position,
             idealCameraPosition,
             cameraFollowSpeed * Time.deltaTime
         );
 
-        playerCamera.transform.position = currentCameraPos;
+            playerCamera.transform.position = currentCameraPos;
 
-        Vector3 lookDirection = (playerPosition - playerCamera.transform.position).normalized;
-        if (lookDirection != Vector3.zero)
-        {
-            Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            playerCamera.transform.rotation = Quaternion.Lerp(
-                playerCamera.transform.rotation,
-                targetRotation,
-                cameraFollowSpeed * Time.deltaTime
-            );
-        }
-    }
-
-    void StartCameraFollow()
-    {
-        if (enableCameraFollow && playerCamera != null)
-        {
-            isCameraFollowing = true;
-            if (cameraFollowCoroutine != null)
-                StopCoroutine(cameraFollowCoroutine);
-        }
-    }
-
-    void StopCameraFollow()
-    {
-        isCameraFollowing = false;
-        if (cameraFollowCoroutine != null)
-        {
-            StopCoroutine(cameraFollowCoroutine);
-            cameraFollowCoroutine = null;
+            var lookDirection = (playerPosition - playerCamera.transform.position).normalized;
+            if (lookDirection.sqrMagnitude > 0.001f)
+            {
+                var targetRotation = Quaternion.LookRotation(lookDirection);
+                playerCamera.transform.rotation = Quaternion.Lerp(
+                    playerCamera.transform.rotation,
+                    targetRotation,
+                    cameraFollowSpeed * Time.deltaTime
+                );
+            }
         }
 
-        if (playerCamera != null)
+        void StartCameraFollow()
         {
-            StartCoroutine(ReturnCameraToPlayer());
-        }
-    }
-
-    IEnumerator ReturnCameraToPlayer()
-    {
-        if (playerCamera == null) yield break;
-
-        Vector3 startPosition = playerCamera.transform.position;
-        Quaternion startRotation = playerCamera.transform.rotation;
-        Vector3 targetPosition = transform.position + originalCameraPosition;
-        Quaternion targetRotation = Quaternion.identity;
-
-        float timer = 0f;
-        float duration = 0.6f;
-
-        while (timer < duration)
-        {
-            timer += Time.deltaTime;
-            float normalizedTime = timer / duration;
-            float curveValue = cameraFollowCurve.Evaluate(normalizedTime);
-
-            playerCamera.transform.position = Vector3.Lerp(startPosition, targetPosition, curveValue);
-            playerCamera.transform.rotation = Quaternion.Lerp(startRotation, targetRotation, curveValue);
-
-            yield return null;
+            if (enableCameraFollow && playerCamera != null)
+            {
+                isCameraFollowing = true;
+            }
         }
 
-        playerCamera.transform.localPosition = originalCameraPosition;
-    }
-
-    void CreateDashParticle(Vector3 position)
-    {
-        GameObject particle = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        particle.transform.position = position + Random.insideUnitSphere * 0.5f;
-        particle.transform.localScale = Vector3.one * Random.Range(0.05f, 0.15f);
-        particle.transform.rotation = Random.rotation;
-
-        Renderer renderer = particle.GetComponent<Renderer>();
-        renderer.material = new Material(Shader.Find("Sprites/Default"));
-        renderer.material.color = Color.Lerp(dashTrailColor, Color.white, Random.Range(0f, 1f));
-
-        Destroy(particle.GetComponent<Collider>());
-        StartCoroutine(AnimateDashParticle(particle));
-    }
-
-    IEnumerator AnimateDashParticle(GameObject particle)
-    {
-        Vector3 startScale = particle.transform.localScale;
-        Vector3 velocity = Random.insideUnitSphere * 2f;
-        velocity.y = Mathf.Abs(velocity.y);
-
-        Renderer renderer = particle.GetComponent<Renderer>();
-        Color startColor = renderer.material.color;
-
-        float timer = 0f;
-        float duration = 0.4f;
-
-        while (timer < duration)
+        void StopCameraFollow()
         {
-            timer += Time.deltaTime;
-            float normalizedTime = timer / duration;
+            isCameraFollowing = false;
 
-            particle.transform.position += velocity * Time.deltaTime;
-            particle.transform.localScale = Vector3.Lerp(startScale, Vector3.zero, normalizedTime);
-
-            float alpha = 1f - normalizedTime;
-            renderer.material.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
-
-            velocity *= 0.98f;
-            yield return null;
+            if (playerCamera != null)
+            {
+                StartCoroutine(ReturnCameraToPlayer());
+            }
         }
 
-        Destroy(particle);
-    }
-
-    void CreateEnhancedTeleportEffect(Vector3 position, bool isDeparture)
-    {
-        if (teleportEffectPrefab != null)
+        IEnumerator ReturnCameraToPlayer()
         {
-            GameObject effect = Instantiate(teleportEffectPrefab, position, Quaternion.identity);
-            Destroy(effect, 1f);
-        }
-        else
-        {
-            CreateAdvancedTeleportEffect(position, isDeparture);
-        }
-    }
+            if (playerCamera == null) yield break;
 
-    void CreateAdvancedTeleportEffect(Vector3 position, bool isDeparture)
-    {
-        for (int i = 0; i < teleportParticleCount; i++)
-        {
-            GameObject particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var startPosition = playerCamera.transform.position;
+            var startRotation = playerCamera.transform.rotation;
+            var targetPosition = cachedTransform.position + originalCameraPosition;
+            var targetRotation = Quaternion.identity;
 
-            float angle = (i / (float)teleportParticleCount) * 360f * Mathf.Deg2Rad;
-            Vector3 direction = new Vector3(Mathf.Cos(angle), Random.Range(-0.2f, 1f), Mathf.Sin(angle)).normalized;
+            float timer = 0f;
+            float duration = 0.6f;
 
-            particle.transform.position = position + direction * Random.Range(0.1f, 0.3f);
-            particle.transform.localScale = Vector3.one * Random.Range(0.04f, 0.12f);
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                float normalizedTime = timer / duration;
+                float curveValue = cameraFollowCurve.Evaluate(normalizedTime);
 
-            Renderer renderer = particle.GetComponent<Renderer>();
-            renderer.material = new Material(Shader.Find("Sprites/Default"));
+                playerCamera.transform.position = Vector3.Lerp(startPosition, targetPosition, curveValue);
+                playerCamera.transform.rotation = Quaternion.Lerp(startRotation, targetRotation, curveValue);
 
-            Color particleColor = Color.Lerp(teleportColor1, teleportColor2, Random.Range(0f, 1f));
-            renderer.material.color = particleColor;
+                yield return null;
+            }
 
-            Destroy(particle.GetComponent<Collider>());
-            StartCoroutine(AnimateEnhancedTeleportParticle(particle, direction, isDeparture));
+            playerCamera.transform.localPosition = originalCameraPosition;
         }
 
-        CreateGroundImpactEffect(position, isDeparture);
-    }
-
-    void CreateGroundImpactEffect(Vector3 position, bool isDeparture)
-    {
-        GameObject ring = new GameObject("GroundRing");
-        ring.transform.position = new Vector3(position.x, position.y - 0.5f, position.z);
-
-        LineRenderer lr = ring.AddComponent<LineRenderer>();
-        lr.material = new Material(Shader.Find("Sprites/Default"));
-        lr.startColor = isDeparture ? teleportColor2 : teleportColor1;
-        lr.endColor = lr.startColor;
-        lr.startWidth = 0.1f;
-        lr.endWidth = 0.1f;
-        lr.useWorldSpace = false;
-        lr.loop = true;
-
-        int segments = 20;
-        lr.positionCount = segments;
-        float radius = 0.2f;
-
-        for (int i = 0; i < segments; i++)
+        void CreateDashParticle(Vector3 position)
         {
-            float angle = i * 2f * Mathf.PI / segments;
-            Vector3 point = new Vector3(Mathf.Cos(angle) * radius, 0, Mathf.Sin(angle) * radius);
-            lr.SetPosition(i, point);
+            if (particlePool.Count > 0)
+            {
+                var particle = particlePool.Dequeue();
+                particle.transform.position = position + Random.insideUnitSphere * 0.5f;
+                particle.transform.localScale = Vector3.one * Random.Range(0.05f, 0.15f);
+                particle.transform.rotation = Random.rotation;
+                particle.SetActive(true);
+
+                var renderer = particle.GetComponent<Renderer>();
+                renderer.material.color = Color.Lerp(dashTrailColor, Color.white, Random.value);
+
+                StartCoroutine(AnimateDashParticle(particle));
+            }
         }
 
-        StartCoroutine(AnimateGroundRing(ring, lr, isDeparture));
-    }
-
-    IEnumerator AnimateGroundRing(GameObject ring, LineRenderer lr, bool isDeparture)
-    {
-        Color startColor = lr.startColor;
-        float timer = 0f;
-        float duration = 0.5f;
-        float startRadius = 0.2f;
-        float maxRadius = isDeparture ? 2f : 1.5f;
-
-        while (timer < duration)
+        IEnumerator AnimateDashParticle(GameObject particle)
         {
-            timer += Time.deltaTime;
-            float normalizedTime = timer / duration;
+            var startScale = particle.transform.localScale;
+            var velocity = Random.insideUnitSphere * 2f;
+            velocity.y = Mathf.Abs(velocity.y);
 
-            float currentRadius = Mathf.Lerp(startRadius, maxRadius, normalizedTime);
-            int segments = lr.positionCount;
+            var renderer = particle.GetComponent<Renderer>();
+            var startColor = renderer.material.color;
+
+            float timer = 0f;
+            float duration = 0.4f;
+
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                float normalizedTime = timer / duration;
+
+                particle.transform.position += velocity * Time.deltaTime;
+                particle.transform.localScale = Vector3.Lerp(startScale, Vector3.zero, normalizedTime);
+
+                float alpha = 1f - normalizedTime;
+                var color = startColor;
+                color.a = alpha;
+                renderer.material.SetColor(ColorProperty, color);
+
+                velocity *= 0.98f;
+                yield return null;
+            }
+
+            particle.SetActive(false);
+            particlePool.Enqueue(particle);
+        }
+
+        void CreateEnhancedTeleportEffect(Vector3 position, bool isDeparture)
+        {
+            PlaySFX(teleportSFX);
+
+            if (teleportEffectPrefab != null && teleportEffectPool.Count > 0)
+            {
+                var effect = teleportEffectPool.Dequeue();
+                effect.transform.position = position;
+                effect.SetActive(true);
+                StartCoroutine(ReturnEffectToPool(effect, teleportEffectPool, 1f));
+            }
+            else
+            {
+                CreateAdvancedTeleportEffect(position, isDeparture);
+            }
+        }
+
+        void CreateAdvancedTeleportEffect(Vector3 position, bool isDeparture)
+        {
+            for (int i = 0; i < teleportParticleCount; i++)
+            {
+                if (particlePool.Count > 0)
+                {
+                    var particle = particlePool.Dequeue();
+
+                    float angle = (i / (float)teleportParticleCount) * 360f * Mathf.Deg2Rad;
+                    var direction = new Vector3(Mathf.Cos(angle), Random.Range(-0.2f, 1f), Mathf.Sin(angle)).normalized;
+
+                    particle.transform.position = position + direction * Random.Range(0.1f, 0.3f);
+                    particle.transform.localScale = Vector3.one * Random.Range(0.04f, 0.12f);
+                    particle.SetActive(true);
+
+                    var renderer = particle.GetComponent<Renderer>();
+                    var particleColor = Color.Lerp(teleportColor1, teleportColor2, Random.value);
+                    renderer.material.SetColor(ColorProperty, particleColor);
+
+                    StartCoroutine(AnimateEnhancedTeleportParticle(particle, direction, isDeparture));
+                }
+            }
+
+            CreateGroundImpactEffect(position, isDeparture);
+        }
+
+        void CreateGroundImpactEffect(Vector3 position, bool isDeparture)
+        {
+            var ring = new GameObject("GroundRing");
+            ring.transform.position = new Vector3(position.x, position.y - 0.5f, position.z);
+
+            var lr = ring.AddComponent<LineRenderer>();
+            lr.material = teleportMaterial;
+            lr.startColor = isDeparture ? teleportColor2 : teleportColor1;
+            lr.endColor = lr.startColor;
+            lr.startWidth = 0.1f;
+            lr.endWidth = 0.1f;
+            lr.useWorldSpace = false;
+            lr.loop = true;
+
+            const int segments = 20;
+            lr.positionCount = segments;
+            const float radius = 0.2f;
 
             for (int i = 0; i < segments; i++)
             {
                 float angle = i * 2f * Mathf.PI / segments;
-                Vector3 point = new Vector3(Mathf.Cos(angle) * currentRadius, 0, Mathf.Sin(angle) * currentRadius);
+                var point = new Vector3(Mathf.Cos(angle) * radius, 0, Mathf.Sin(angle) * radius);
                 lr.SetPosition(i, point);
             }
 
-            float alpha = 1f - normalizedTime;
-            lr.startColor = new Color(startColor.r, startColor.g, startColor.b, alpha);
-            lr.endColor = lr.startColor;
-
-            yield return null;
+            StartCoroutine(AnimateGroundRing(ring, lr, isDeparture));
         }
 
-        Destroy(ring);
-    }
-
-    IEnumerator AnimateEnhancedTeleportParticle(GameObject particle, Vector3 direction, bool isDeparture)
-    {
-        Vector3 startPos = particle.transform.position;
-        Vector3 startScale = particle.transform.localScale;
-        float timer = 0f;
-        float duration = isDeparture ? 0.4f : 0.3f;
-
-        Renderer renderer = particle.GetComponent<Renderer>();
-        Color originalColor = renderer.material.color;
-
-        while (timer < duration)
+        IEnumerator AnimateGroundRing(GameObject ring, LineRenderer lr, bool isDeparture)
         {
-            timer += Time.deltaTime;
-            float normalizedTime = timer / duration;
+            var startColor = lr.startColor;
+            float timer = 0f;
+            const float duration = 0.5f;
+            const float startRadius = 0.2f;
+            float maxRadius = isDeparture ? 2f : 1.5f;
 
-            if (isDeparture)
+            while (timer < duration)
             {
-                Vector3 movement = direction * normalizedTime * teleportEffectRadius * 1.5f;
-                movement.y += normalizedTime * normalizedTime * 4f;
-                particle.transform.position = startPos + movement;
-                particle.transform.Rotate(Vector3.up * Time.deltaTime * 720f);
-            }
-            else
-            {
-                Vector3 movement = direction * (1f - normalizedTime) * teleportEffectRadius;
-                float spiral = normalizedTime * 360f * Mathf.Deg2Rad;
-                movement.x += Mathf.Cos(spiral) * 0.3f;
-                movement.z += Mathf.Sin(spiral) * 0.3f;
-                particle.transform.position = startPos + movement;
+                timer += Time.deltaTime;
+                float normalizedTime = timer / duration;
+
+                float currentRadius = Mathf.Lerp(startRadius, maxRadius, normalizedTime);
+                int segments = lr.positionCount;
+
+                for (int i = 0; i < segments; i++)
+                {
+                    float angle = i * 2f * Mathf.PI / segments;
+                    var point = new Vector3(Mathf.Cos(angle) * currentRadius, 0, Mathf.Sin(angle) * currentRadius);
+                    lr.SetPosition(i, point);
+                }
+
+                float alpha = 1f - normalizedTime;
+                var color = startColor;
+                color.a = alpha;
+                lr.startColor = color;
+                lr.endColor = color;
+
+                yield return null;
             }
 
-            float scaleMultiplier = isDeparture ? (1f + normalizedTime * 3f) : (2f - normalizedTime * 1.5f);
-            particle.transform.localScale = startScale * scaleMultiplier;
-
-            float baseAlpha = 1f - normalizedTime;
-            float flicker = Mathf.Sin(normalizedTime * 30f) * 0.4f + 0.6f;
-            float alpha = baseAlpha * flicker;
-            renderer.material.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
-
-            yield return null;
+            Destroy(ring);
         }
 
-        Destroy(particle);
-    }
-
-    IEnumerator GroundMovingCameraShake()
-    {
-        if (playerCamera == null) yield break;
-
-        Vector3 originalPosition = playerCamera.transform.localPosition;
-        float timer = 0f;
-
-        while (timer < earthquakeDuration)
+        IEnumerator AnimateEnhancedTeleportParticle(GameObject particle, Vector3 direction, bool isDeparture)
         {
-            timer += Time.deltaTime;
-            float normalizedTime = timer / earthquakeDuration;
+            var startPos = particle.transform.position;
+            var startScale = particle.transform.localScale;
+            float timer = 0f;
+            float duration = isDeparture ? 0.4f : 0.3f;
 
-            float curveIntensity = earthquakeCurve.Evaluate(normalizedTime);
-            float currentIntensity = earthquakeIntensity * curveIntensity;
+            var renderer = particle.GetComponent<Renderer>();
+            var originalColor = renderer.material.color;
 
-            Vector3 shakeOffset = Vector3.zero;
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                float normalizedTime = timer / duration;
 
-            float horizontalWave = Mathf.Sin(normalizedTime * shakeFrequency * 2f * Mathf.PI);
-            shakeOffset.x = horizontalWave * currentIntensity * horizontalShakeMultiplier;
+                if (isDeparture)
+                {
+                    var movement = direction * normalizedTime * teleportEffectRadius * 1.5f;
+                    movement.y += normalizedTime * normalizedTime * 4f;
+                    particle.transform.position = startPos + movement;
+                    particle.transform.Rotate(Vector3.up * Time.deltaTime * 720f);
+                }
+                else
+                {
+                    var movement = direction * (1f - normalizedTime) * teleportEffectRadius;
+                    float spiral = normalizedTime * 360f * Mathf.Deg2Rad;
+                    movement.x += Mathf.Cos(spiral) * 0.3f;
+                    movement.z += Mathf.Sin(spiral) * 0.3f;
+                    particle.transform.position = startPos + movement;
+                }
 
-            float horizontalWave2 = Mathf.Cos(normalizedTime * shakeFrequency * 1.7f * Mathf.PI);
-            shakeOffset.z = horizontalWave2 * currentIntensity * horizontalShakeMultiplier * 0.7f;
+                float scaleMultiplier = isDeparture ? (1f + normalizedTime * 3f) : (2f - normalizedTime * 1.5f);
+                particle.transform.localScale = startScale * scaleMultiplier;
 
-            float verticalWave = Mathf.Sin(normalizedTime * shakeFrequency * 3f * Mathf.PI);
-            shakeOffset.y = verticalWave * currentIntensity * verticalShakeMultiplier;
+                float baseAlpha = 1f - normalizedTime;
+                float flicker = Mathf.Sin(normalizedTime * 30f) * 0.4f + 0.6f;
+                float alpha = baseAlpha * flicker;
+                var color = originalColor;
+                color.a = alpha;
+                renderer.material.SetColor(ColorProperty, color);
 
-            shakeOffset.x += Random.Range(-0.1f, 0.1f) * currentIntensity;
-            shakeOffset.y += Random.Range(-0.05f, 0.05f) * currentIntensity;
-            shakeOffset.z += Random.Range(-0.1f, 0.1f) * currentIntensity;
+                yield return null;
+            }
 
-            playerCamera.transform.localPosition = originalPosition + shakeOffset;
-            yield return null;
+            particle.SetActive(false);
+            particlePool.Enqueue(particle);
         }
 
-        playerCamera.transform.localPosition = originalPosition;
-    }
-
-    void CancelAttack()
-    {
-        Debug.Log("Orbital Slash Attack cancelled!");
-
-        isPerformingAttack = false;
-        waitingForDashInput = false;
-        dashInputReceived = false;
-        currentTarget = null;
-
-        StopCameraFollow();
-
-        if (playerController != null)
-            playerController.enabled = true;
-
-        if (attackTrail != null)
-            attackTrail.enabled = false;
-
-        SetPlayerVisibility(true);
-
-        StartCoroutine(InstantTeleport(originalPosition));
-        StartCoroutine(AttackCooldown());
-    }
-
-    void EndAttack()
-    {
-        isPerformingAttack = false;
-        currentTarget = null;
-
-        StopCameraFollow();
-
-        if (playerController != null)
-            playerController.enabled = true;
-
-        if (attackTrail != null)
-            attackTrail.enabled = false;
-
-        StartCoroutine(AttackCooldown());
-
-        Debug.Log("Dash Slash Attack completed!");
-    }
-
-    IEnumerator AttackCooldown()
-    {
-        yield return new WaitForSeconds(cooldownDuration);
-        canUseAttack = true;
-        Debug.Log("Dash slash attack ready!");
-    }
-
-    // MAIN ATTACK COROUTINE - Now purely manual control
-    IEnumerator PerformDashSlashAttack(GameObject target)
-    {
-        isPerformingAttack = true;
-        canUseAttack = false;
-        currentTarget = target;
-        originalPosition = transform.position;
-        currentHitCount = 0;
-
-        Debug.Log($"Starting Manual Dash Slash Attack on {target.name}! Use {dashKey} to dash through enemy or {cancelAttackKey} to cancel.");
-
-        StartCameraFollow();
-
-        if (playerController != null)
-            playerController.enabled = false;
-
-        if (attackTrail != null)
-            attackTrail.enabled = true;
-
-        // Perform manual dash-and-slice attacks
-        for (int i = 0; i < hitsPerEnemy; i++)
+        IEnumerator GroundMovingCameraShake()
         {
-            if (currentTarget == null) break;
+            if (playerCamera == null) yield break;
 
-            Vector3 enemyCenter = currentTarget.transform.position;
+            var originalPosition = playerCamera.transform.localPosition;
+            float timer = 0f;
 
-            // 1. Teleport to random position away from enemy
-            Vector3 dashStartPosition = CalculateRandomDashStartPosition(enemyCenter);
-            yield return StartCoroutine(InstantTeleport(dashStartPosition));
+            while (timer < earthquakeDuration)
+            {
+                timer += Time.deltaTime;
+                float normalizedTime = timer / earthquakeDuration;
+
+                float curveIntensity = earthquakeCurve.Evaluate(normalizedTime);
+                float currentIntensity = earthquakeIntensity * curveIntensity;
+
+                var shakeOffset = Vector3.zero;
+
+                float horizontalWave = Mathf.Sin(normalizedTime * shakeFrequency * 2f * Mathf.PI);
+                shakeOffset.x = horizontalWave * currentIntensity * horizontalShakeMultiplier;
+
+                float horizontalWave2 = Mathf.Cos(normalizedTime * shakeFrequency * 1.7f * Mathf.PI);
+                shakeOffset.z = horizontalWave2 * currentIntensity * horizontalShakeMultiplier * 0.7f;
+
+                float verticalWave = Mathf.Sin(normalizedTime * shakeFrequency * 3f * Mathf.PI);
+                shakeOffset.y = verticalWave * currentIntensity * verticalShakeMultiplier;
+
+                shakeOffset.x += Random.Range(-0.1f, 0.1f) * currentIntensity;
+                shakeOffset.y += Random.Range(-0.05f, 0.05f) * currentIntensity;
+                shakeOffset.z += Random.Range(-0.1f, 0.1f) * currentIntensity;
+
+                playerCamera.transform.localPosition = originalPosition + shakeOffset;
+                yield return null;
+            }
+
+            playerCamera.transform.localPosition = originalPosition;
+        }
+
+        void CancelAttack()
+        {
+            StopAllCoroutines();
+
+            isPerformingAttack = false;
+            waitingForDashInput = false;
+            dashInputReceived = false;
+            currentTarget = null;
+
+            CleanupPromptUI();
+            StopCameraFollow();
+
+            if (playerController != null)
+                playerController.enabled = true;
+
+            if (attackTrail != null)
+                attackTrail.enabled = false;
+
+            SetPlayerVisibility(true);
+            Time.timeScale = 1f; // Reset time scale
+
+            StartCoroutine(InstantTeleport(originalPosition));
+            StartCoroutine(AttackCooldown());
+
+            Debug.Log("Orbital Slash Attack cancelled!");
+        }
+
+        void EndAttack()
+        {
+            isPerformingAttack = false;
+            currentTarget = null;
+
+            CleanupPromptUI();
+            StopCameraFollow();
+
+            if (playerController != null)
+                playerController.enabled = true;
+
+            if (attackTrail != null)
+                attackTrail.enabled = false;
+
+            PlaySFX(attackEndSFX);
+            StartCoroutine(AttackCooldown());
+
+            Debug.Log("Dash Slash Attack completed!");
+        }
+
+        IEnumerator AttackCooldown()
+        {
+            canUseAttack = false;
+            cooldownStartTime = Time.time;
+
+            yield return new WaitForSeconds(cooldownDuration);
+
+            canUseAttack = true;
+            Debug.Log("Dash slash attack ready!");
+        }
+
+        // MAIN ATTACK COROUTINE
+        IEnumerator PerformDashSlashAttack(GameObject target)
+        {
+            isPerformingAttack = true;
+            canUseAttack = false;
+            currentTarget = target;
+            originalPosition = cachedTransform.position;
+            currentHitCount = 0;
+
+            PlaySFX(attackStartSFX);
+
+            StartCameraFollow();
+
+            if (playerController != null)
+                playerController.enabled = false;
+
+            if (attackTrail != null)
+                attackTrail.enabled = true;
+
+            // Perform manual dash-and-slice attacks
+            for (int i = 0; i < hitsPerEnemy; i++)
+            {
+                if (currentTarget == null) break;
+
+                var enemyCenter = currentTarget.transform.position;
+
+                // 1. Teleport to random position
+                var dashStartPosition = CalculateRandomDashStartPosition(enemyCenter);
+                yield return StartCoroutine(InstantTeleport(dashStartPosition));
+
+                if (isCameraFollowing)
+                {
+                    StartCoroutine(SmoothCameraFollow(dashStartPosition));
+                }
+
+                // 2. Brief pause
+                yield return preSlashWait;
+
+                // 3. Wait for manual dash input
+                yield return StartCoroutine(WaitForDashInput());
+
+                // If cancelled during input wait, exit
+                if (!isPerformingAttack) yield break;
+
+                // 4. Dash through enemy
+                var dashEndPosition = CalculateDashThroughPosition(dashStartPosition, enemyCenter);
+                yield return StartCoroutine(DashThroughEnemy(dashStartPosition, dashEndPosition, currentTarget));
+
+                // 5. Brief pause after slash
+                yield return postSlashWait;
+
+                // 6. Teleport effect between hits
+                if (i < hitsPerEnemy - 1)
+                {
+                    CreateEnhancedTeleportEffect(cachedTransform.position, true);
+                    SetPlayerVisibility(false);
+                    yield return new WaitForSeconds(0.1f);
+                    SetPlayerVisibility(true);
+                }
+            }
+
+            yield return new WaitForSeconds(0.3f);
+
+            // Return to safe position
+            var finalPosition = currentTarget != null ?
+                currentTarget.transform.position + (originalPosition - currentTarget.transform.position).normalized * 3f :
+                originalPosition;
+            finalPosition.y = originalPosition.y;
+
+            yield return StartCoroutine(InstantTeleport(finalPosition));
 
             if (isCameraFollowing)
             {
-                StartCoroutine(SmoothCameraFollow(dashStartPosition));
+                StartCoroutine(SmoothCameraFollow(finalPosition));
             }
 
-            // 2. Brief pause to build anticipation
-            yield return new WaitForSeconds(preSlashPause);
+            EndAttack();
+        }
 
-            // 3. Wait for manual dash input (NO TIMEOUT - purely manual)
-            Debug.Log($"Ready for dash {i + 1}/{hitsPerEnemy}! Press {dashKey} when ready!");
-            yield return StartCoroutine(WaitForDashInput());
+        IEnumerator InstantTeleport(Vector3 targetPosition)
+        {
+            CreateEnhancedTeleportEffect(cachedTransform.position, true);
+            SetPlayerVisibility(false);
 
-            // 4. Dash through the enemy
-            Vector3 dashEndPosition = CalculateDashThroughPosition(dashStartPosition, enemyCenter);
-            yield return StartCoroutine(DashThroughEnemy(dashStartPosition, dashEndPosition, currentTarget));
+            characterController.enabled = false;
+            cachedTransform.position = targetPosition;
+            characterController.enabled = true;
 
-            // 5. Brief pause after slash
-            yield return new WaitForSeconds(postSlashPause);
+            yield return new WaitForSeconds(0.12f);
 
-            // 6. Teleport effect between hits (except last)
-            if (i < hitsPerEnemy - 1)
+            SetPlayerVisibility(true);
+            CreateEnhancedTeleportEffect(targetPosition, false);
+        }
+
+        void PlaySFX(AudioClip clip)
+        {
+            if (audioSource != null && clip != null)
             {
-                CreateEnhancedTeleportEffect(transform.position, true);
-                SetPlayerVisibility(false);
-                yield return new WaitForSeconds(0.1f);
-                SetPlayerVisibility(true);
+                audioSource.PlayOneShot(clip, sfxVolume);
             }
         }
 
-        yield return new WaitForSeconds(0.3f);
-
-        Vector3 finalPosition = currentTarget != null ?
-            currentTarget.transform.position + (originalPosition - currentTarget.transform.position).normalized * 3f :
-            originalPosition;
-        finalPosition.y = originalPosition.y;
-
-        yield return StartCoroutine(InstantTeleport(finalPosition));
-
-        if (isCameraFollowing)
+        // Visual debugging
+        void OnDrawGizmosSelected()
         {
-            StartCoroutine(SmoothCameraFollow(finalPosition));
-        }
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(cachedTransform.position, attackRange);
 
-        EndAttack();
-    }
-
-    IEnumerator InstantTeleport(Vector3 targetPosition)
-    {
-        CreateEnhancedTeleportEffect(transform.position, true);
-        SetPlayerVisibility(false);
-
-        characterController.enabled = false;
-        transform.position = targetPosition;
-        characterController.enabled = true;
-
-        yield return new WaitForSeconds(0.12f);
-
-        SetPlayerVisibility(true);
-        CreateEnhancedTeleportEffect(targetPosition, false);
-    }
-
-    // Visual debugging
-    void OnDrawGizmosSelected()
-    {
-        Gizmos.color = Color.cyan;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
-
-        if (currentTarget != null)
-        {
-            Vector3 center = currentTarget.transform.position;
-
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(center, dashDistance);
-
-            Gizmos.color = Color.blue;
-            Gizmos.DrawWireSphere(center, dashDistance - 1f);
-
-            Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(center, dashThroughDistance);
-
-            // Show hit detection radius
-            Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(center, hitDetectionRadius);
-
-            for (int i = 0; i < 8; i++)
+            if (currentTarget != null)
             {
-                float angle = i * 45f * Mathf.Deg2Rad;
-                Vector3 pos = center;
-                pos.x += Mathf.Cos(angle) * dashDistance;
-                pos.z += Mathf.Sin(angle) * dashDistance;
-                pos.y += groundOffset;
+                var center = currentTarget.transform.position;
 
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawWireCube(pos, Vector3.one * 0.3f);
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawWireSphere(center, dashDistance);
 
-                Vector3 dashEnd = center + (pos - center).normalized * -dashThroughDistance;
                 Gizmos.color = Color.green;
-                Gizmos.DrawLine(pos, dashEnd);
+                Gizmos.DrawWireSphere(center, hitDetectionRadius);
+
+                for (int i = 0; i < 8; i++)
+                {
+                    float angle = i * 45f * Mathf.Deg2Rad;
+                    var pos = center;
+                    pos.x += Mathf.Cos(angle) * dashDistance;
+                    pos.z += Mathf.Sin(angle) * dashDistance;
+                    pos.y += groundOffset;
+
+                    Gizmos.color = Color.magenta;
+                    Gizmos.DrawWireCube(pos, Vector3.one * 0.3f);
+
+                    var dashEnd = center + (pos - center).normalized * -dashThroughDistance;
+                    Gizmos.color = Color.green;
+                    Gizmos.DrawLine(pos, dashEnd);
+                }
             }
         }
 
-        if (enableCameraFollow && currentTarget != null)
-        {
-            Vector3 playerPos = transform.position;
-            Vector3 directionToPlayer = (playerPos - currentTarget.transform.position).normalized;
-            Vector3 idealCameraPos = playerPos - directionToPlayer * cameraFollowDistance;
-            idealCameraPos.y = playerPos.y + cameraHeightOffset;
-
-            Gizmos.color = Color.white;
-            Gizmos.DrawWireCube(idealCameraPos, Vector3.one * 0.5f);
-            Gizmos.DrawLine(idealCameraPos, playerPos);
-        }
-    }
-
-    // Public methods
-    public bool IsAttackOnCooldown()
-    {
-        return !canUseAttack;
-    }
-
-    public bool IsPerformingAttack()
-    {
-        return isPerformingAttack;
-    }
-
-    public bool IsWaitingForDashInput()
-    {
-        return waitingForDashInput;
-    }
+    // Public API
+    public bool IsAttackOnCooldown() => !canUseAttack;
+    public bool IsPerformingAttack() => isPerformingAttack;
+    public bool IsWaitingForDashInput() => waitingForDashInput;
+    public float GetCooldownTimeRemaining() => canUseAttack ? 0f : Mathf.Max(0f, cooldownDuration - (Time.time - cooldownStartTime));
+    public float GetCooldownPercentage() => canUseAttack ? 0f : (Time.time - cooldownStartTime) / cooldownDuration;
 
     public void ForceDash()
     {
@@ -1195,6 +1359,30 @@ public class OrbitalSlashAttack : MonoBehaviour
         {
             dashInputReceived = true;
             waitingForDashInput = false;
+            PlaySFX(dashStartSFX);
         }
     }
 }
+Vector3.Lerp(startPosition, idealCameraPosition, curveValue);
+playerCamera.transform.position = currentCameraPos;
+
+var lookDirection = (targetPosition - playerCamera.transform.position).normalized;
+if (lookDirection.sqrMagnitude > 0.001f)
+{
+    var targetRotation = Quaternion.LookRotation(lookDirection);
+    playerCamera.transform.rotation = Quaternion.Lerp(playerCamera.transform.rotation, targetRotation, curveValue);
+}
+
+yield return null;
+        }
+    }
+
+    void UpdateCameraFollowDuringDash(Vector3 playerPosition)
+{
+    if (!enableCameraFollow || playerCamera == null || currentTarget == null) return;
+
+    var directionToPlayer = (playerPosition - currentTarget.transform.position).normalized;
+    var idealCameraPosition = playerPosition - directionToPlayer * cameraFollowDistance;
+    idealCameraPosition.y = playerPosition.y + cameraHeightOffset;
+
+    var currentCameraPos =

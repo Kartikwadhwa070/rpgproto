@@ -22,8 +22,15 @@ public class TeleportSlashAttack : MonoBehaviour
     public GameObject slashEffectPrefab;
     public GameObject teleportEffectPrefab;
     public float slashEffectDuration = 0.5f;
-    public Material playerInvisibleMaterial;
     public float invisibilityFlashDuration = 0.05f;
+
+    [Header("Audio Effects")]
+    public AudioSource audioSource;
+    public AudioClip teleportSFX;
+    public AudioClip slashSFX;
+    public AudioClip ultimateStartSFX;
+    public AudioClip ultimateEndSFX;
+    [Range(0f, 1f)] public float sfxVolume = 1f;
 
     [Header("Camera Effects")]
     public bool enableCameraShake = true;
@@ -36,30 +43,57 @@ public class TeleportSlashAttack : MonoBehaviour
     [Header("Cooldown")]
     public float cooldownDuration = 10f;
 
-    // Private variables
+    // Cached components
     private PlayerController playerController;
     private CharacterController characterController;
     private Camera playerCamera;
+    private Renderer[] playerRenderers;
+    private Transform cachedTransform;
+
+    // State management
     private bool isPerformingAttack = false;
     private bool canUseUltimate = true;
-    private List<GameObject> enemiesInRange = new List<GameObject>();
-    private Vector3 originalPosition;
-    private Material[] originalMaterials;
-    private Renderer[] playerRenderers;
+    private float cooldownStartTime;
 
-    // Attack tracking
-    private List<GameObject> hitEnemies = new List<GameObject>();
+    // Attack data
+    private readonly List<GameObject> enemiesInRange = new List<GameObject>(10);
+    private readonly HashSet<GameObject> hitEnemies = new HashSet<GameObject>();
+    private Vector3 originalPosition;
+
+    // Object pooling for effects
+    private readonly Queue<GameObject> slashEffectPool = new Queue<GameObject>();
+    private readonly Queue<GameObject> teleportEffectPool = new Queue<GameObject>();
+    private const int EFFECT_POOL_SIZE = 5;
+
+    // Cached materials and shaders
+    private static readonly int ColorProperty = Shader.PropertyToID("_Color");
+    private static Material slashMaterial;
+    private static Material teleportMaterial;
+
+    // Wait instructions (reused)
+    private readonly WaitForSeconds pauseWait;
+    private readonly WaitForSeconds finalPauseWait;
+    private readonly WaitForSeconds invisibilityWait;
+
+    public TeleportSlashAttack()
+    {
+        pauseWait = new WaitForSeconds(pauseBeforeNextSlash);
+        finalPauseWait = new WaitForSeconds(finalPauseDuration);
+        invisibilityWait = new WaitForSeconds(invisibilityFlashDuration);
+    }
+
+    void Awake()
+    {
+        cachedTransform = transform;
+        InitializeComponents();
+        InitializeMaterials();
+        InitializeAudio();
+    }
 
     void Start()
     {
-        playerController = GetComponent<PlayerController>();
-        characterController = GetComponent<CharacterController>();
-        playerCamera = Camera.main;
-        if (playerCamera == null)
-            playerCamera = FindObjectOfType<Camera>();
-
         playerRenderers = GetComponentsInChildren<Renderer>();
-        StoreOriginalMaterials();
+        InitializeEffectPools();
     }
 
     void Update()
@@ -70,83 +104,138 @@ public class TeleportSlashAttack : MonoBehaviour
         }
     }
 
-    void StoreOriginalMaterials()
+    void InitializeComponents()
     {
-        List<Material> materials = new List<Material>();
-        foreach (Renderer renderer in playerRenderers)
+        playerController = GetComponent<PlayerController>();
+        characterController = GetComponent<CharacterController>();
+        playerCamera = Camera.main ?? FindObjectOfType<Camera>();
+    }
+
+    void InitializeAudio()
+    {
+        if (audioSource == null)
         {
-            if (renderer != null)
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
             {
-                materials.AddRange(renderer.materials);
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0.7f; // 3D sound
             }
         }
-        originalMaterials = materials.ToArray();
+    }
+
+    void InitializeMaterials()
+    {
+        if (slashMaterial == null)
+        {
+            slashMaterial = new Material(Shader.Find("Sprites/Default"))
+            {
+                color = Color.cyan
+            };
+        }
+
+        if (teleportMaterial == null)
+        {
+            teleportMaterial = new Material(Shader.Find("Sprites/Default"))
+            {
+                color = Color.blue
+            };
+        }
+    }
+
+    void InitializeEffectPools()
+    {
+        // Pre-instantiate effect objects for pooling
+        for (int i = 0; i < EFFECT_POOL_SIZE; i++)
+        {
+            if (slashEffectPrefab != null)
+            {
+                var obj = Instantiate(slashEffectPrefab);
+                obj.SetActive(false);
+                slashEffectPool.Enqueue(obj);
+            }
+
+            if (teleportEffectPrefab != null)
+            {
+                var obj = Instantiate(teleportEffectPrefab);
+                obj.SetActive(false);
+                teleportEffectPool.Enqueue(obj);
+            }
+        }
     }
 
     IEnumerator PerformTeleportSlashAttack()
     {
+        // Initialize attack
         isPerformingAttack = true;
         canUseUltimate = false;
+        cooldownStartTime = Time.time;
         hitEnemies.Clear();
-        originalPosition = transform.position;
+        originalPosition = cachedTransform.position;
+
+        PlaySFX(ultimateStartSFX);
 
         // Disable player movement
-        if (playerController != null)
-            playerController.enabled = false;
+        SetPlayerControlEnabled(false);
 
-        // Find all enemies in range
+        // Find enemies
         FindEnemiesInRange();
 
         if (enemiesInRange.Count == 0)
         {
-            Debug.Log("No enemies in range for ultimate attack!");
             EndAttack();
             yield break;
         }
 
-        Debug.Log($"Starting Teleport Slash Attack on {enemiesInRange.Count} enemies!");
-
-        // Perform slash sequence
-        for (int i = 0; i < numberOfSlashes && i < enemiesInRange.Count; i++)
+        // Perform slashes
+        int slashCount = Mathf.Min(numberOfSlashes, enemiesInRange.Count);
+        for (int i = 0; i < slashCount; i++)
         {
-            if (enemiesInRange[i] != null)
+            var target = enemiesInRange[i];
+            if (target != null)
             {
-                yield return StartCoroutine(PerformSingleSlash(enemiesInRange[i], i == numberOfSlashes - 1 || i == enemiesInRange.Count - 1));
+                bool isFinalSlash = i == slashCount - 1;
+                yield return PerformSingleSlash(target, isFinalSlash);
 
-                if (i < numberOfSlashes - 1 && i < enemiesInRange.Count - 1)
+                if (!isFinalSlash)
                 {
-                    yield return new WaitForSeconds(pauseBeforeNextSlash);
+                    yield return pauseWait;
                 }
             }
         }
 
-        // Final pause and return
-        yield return new WaitForSeconds(finalPauseDuration);
+        // Return to original position
+        yield return finalPauseWait;
+        yield return TeleportToPosition(originalPosition, true);
 
-        // Teleport back to original position with effect
-        yield return StartCoroutine(TeleportToPosition(originalPosition, true));
-
+        PlaySFX(ultimateEndSFX);
         EndAttack();
     }
 
     void FindEnemiesInRange()
     {
         enemiesInRange.Clear();
-        Collider[] colliders = Physics.OverlapSphere(transform.position, attackRange, enemyLayerMask);
 
-        foreach (Collider col in colliders)
+        // Use NonAlloc version to avoid GC
+        var colliders = new Collider[20]; // Reasonable max enemy count
+        int count = Physics.OverlapSphereNonAlloc(cachedTransform.position, attackRange, colliders, enemyLayerMask);
+
+        for (int i = 0; i < count; i++)
         {
+            var col = colliders[i];
             if (col.gameObject != gameObject && col.CompareTag("Enemy"))
             {
                 enemiesInRange.Add(col.gameObject);
             }
         }
 
-        // Sort enemies by distance for optimal attack sequence
+        // Sort by distance using cached positions
+        var playerPos = cachedTransform.position;
         enemiesInRange.Sort((a, b) =>
         {
-            float distA = Vector3.Distance(transform.position, a.transform.position);
-            float distB = Vector3.Distance(transform.position, b.transform.position);
+            float distA = (a.transform.position - playerPos).sqrMagnitude; // Use sqrMagnitude for performance
+            float distB = (b.transform.position - playerPos).sqrMagnitude;
             return distA.CompareTo(distB);
         });
     }
@@ -155,34 +244,30 @@ public class TeleportSlashAttack : MonoBehaviour
     {
         if (target == null) yield break;
 
-        Vector3 targetPosition = target.transform.position + Vector3.up * 0.5f;
-        Vector3 attackPosition = targetPosition + (transform.position - targetPosition).normalized * 2f;
+        var targetPos = target.transform.position;
+        var attackPosition = targetPos + (cachedTransform.position - targetPos).normalized * 2f + Vector3.up * 0.5f;
 
         // Teleport to attack position
-        yield return StartCoroutine(TeleportToPosition(attackPosition, false));
+        yield return TeleportToPosition(attackPosition, false);
 
-        // Face the target
-        Vector3 lookDirection = (target.transform.position - transform.position).normalized;
-        lookDirection.y = 0;
-        if (lookDirection != Vector3.zero)
+        // Face target efficiently
+        var lookDir = targetPos - cachedTransform.position;
+        lookDir.y = 0;
+        if (lookDir.sqrMagnitude > 0.001f)
         {
-            transform.rotation = Quaternion.LookRotation(lookDirection);
+            cachedTransform.rotation = Quaternion.LookRotation(lookDir);
         }
 
-        // Create slash effect
-        CreateSlashEffect(target.transform.position);
+        // Effects and damage
+        CreateSlashEffect(targetPos);
+        PlaySFX(slashSFX);
 
-        // Camera shake
         if (enableCameraShake && playerCamera != null)
         {
             StartCoroutine(CameraShake());
         }
 
-        // Deal damage
-        float currentDamage = isFinalSlash ? finalSlashDamage : damage;
-        DealDamageToTarget(target, currentDamage);
-
-        // Brief invisibility flash during slash
+        DealDamageToTarget(target, isFinalSlash ? finalSlashDamage : damage);
         StartCoroutine(InvisibilityFlash());
 
         yield return new WaitForSeconds(slashInterval);
@@ -190,96 +275,98 @@ public class TeleportSlashAttack : MonoBehaviour
 
     IEnumerator TeleportToPosition(Vector3 targetPosition, bool isReturning)
     {
-        Vector3 startPosition = transform.position;
+        var startPos = cachedTransform.position;
         float timer = 0f;
 
-        // Create teleport effect at start position
-        CreateTeleportEffect(startPosition);
-
-        // Make player invisible during teleport
+        CreateTeleportEffect(startPos);
+        PlaySFX(teleportSFX);
         SetPlayerVisibility(false);
+
+        // Cache component states
+        bool ccEnabled = characterController.enabled;
 
         while (timer < teleportDuration)
         {
             timer += Time.deltaTime;
-            float normalizedTime = timer / teleportDuration;
-            float curveValue = teleportCurve.Evaluate(normalizedTime);
+            float t = teleportCurve.Evaluate(timer / teleportDuration);
+            var newPos = Vector3.Lerp(startPos, targetPosition, t);
 
-            Vector3 currentPosition = Vector3.Lerp(startPosition, targetPosition, curveValue);
-
-            // Ensure we don't go through the ground
             if (!isReturning)
             {
-                currentPosition.y = Mathf.Max(currentPosition.y, targetPosition.y);
+                newPos.y = Mathf.Max(newPos.y, targetPosition.y);
             }
 
+            // More efficient position updates
             characterController.enabled = false;
-            transform.position = currentPosition;
-            characterController.enabled = true;
+            cachedTransform.position = newPos;
+            characterController.enabled = ccEnabled;
 
             yield return null;
         }
 
-        // Ensure final position
+        // Final position
         characterController.enabled = false;
-        transform.position = targetPosition;
-        characterController.enabled = true;
+        cachedTransform.position = targetPosition;
+        characterController.enabled = ccEnabled;
 
-        // Create teleport effect at end position
         CreateTeleportEffect(targetPosition);
-
-        // Make player visible again
         SetPlayerVisibility(true);
     }
 
     IEnumerator InvisibilityFlash()
     {
         SetPlayerVisibility(false);
-        yield return new WaitForSeconds(invisibilityFlashDuration);
+        yield return invisibilityWait;
         SetPlayerVisibility(true);
     }
 
     void SetPlayerVisibility(bool visible)
     {
-        foreach (Renderer renderer in playerRenderers)
+        for (int i = 0; i < playerRenderers.Length; i++)
         {
-            if (renderer != null)
+            if (playerRenderers[i] != null)
             {
-                renderer.enabled = visible;
+                playerRenderers[i].enabled = visible;
             }
         }
     }
 
+    void SetPlayerControlEnabled(bool enabled)
+    {
+        if (playerController != null)
+            playerController.enabled = enabled;
+    }
+
     void CreateSlashEffect(Vector3 position)
     {
-        if (slashEffectPrefab != null)
+        if (slashEffectPrefab != null && slashEffectPool.Count > 0)
         {
-            GameObject effect = Instantiate(slashEffectPrefab, position, Quaternion.identity);
-            Destroy(effect, slashEffectDuration);
+            var effect = slashEffectPool.Dequeue();
+            effect.transform.position = position;
+            effect.SetActive(true);
+            StartCoroutine(ReturnEffectToPool(effect, slashEffectPool, slashEffectDuration));
         }
         else
         {
-            // Create a simple visual effect if no prefab is assigned
             CreateSimpleSlashEffect(position);
         }
     }
 
     void CreateSimpleSlashEffect(Vector3 position)
     {
-        // Create a simple slash line effect using LineRenderer
-        GameObject slashLine = new GameObject("SlashEffect");
-        slashLine.transform.position = position;
+        var slashLine = new GameObject("SlashEffect");
+        var t = slashLine.transform;
+        t.position = position;
 
-        LineRenderer lr = slashLine.AddComponent<LineRenderer>();
-        lr.material = new Material(Shader.Find("Sprites/Default"));
-        lr.startColor = Color.cyan;
-        lr.endColor = Color.cyan;
-        lr.startWidth = 0.1f;
-        lr.endWidth = 0.1f;
+        var lr = slashLine.AddComponent<LineRenderer>();
+        lr.material = slashMaterial;
+        lr.startColor = lr.endColor = Color.cyan;
+        lr.startWidth = lr.endWidth = 0.1f;
         lr.positionCount = 2;
+        lr.useWorldSpace = true;
 
-        Vector3 start = position + Vector3.up * 1f + Vector3.left * 1f;
-        Vector3 end = position + Vector3.down * 1f + Vector3.right * 1f;
+        var start = position + Vector3.up + Vector3.left;
+        var end = position - Vector3.up + Vector3.right;
 
         lr.SetPosition(0, start);
         lr.SetPosition(1, end);
@@ -290,15 +377,15 @@ public class TeleportSlashAttack : MonoBehaviour
     IEnumerator AnimateSlashEffect(GameObject slashObject, LineRenderer lr)
     {
         float timer = 0f;
-        Color originalColor = lr.startColor;
+        var originalColor = lr.startColor;
 
         while (timer < slashEffectDuration)
         {
             timer += Time.deltaTime;
             float alpha = 1f - (timer / slashEffectDuration);
-            Color newColor = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
-            lr.startColor = newColor;
-            lr.endColor = newColor;
+            var newColor = originalColor;
+            newColor.a = alpha;
+            lr.startColor = lr.endColor = newColor;
             yield return null;
         }
 
@@ -307,63 +394,66 @@ public class TeleportSlashAttack : MonoBehaviour
 
     void CreateTeleportEffect(Vector3 position)
     {
-        if (teleportEffectPrefab != null)
+        if (teleportEffectPrefab != null && teleportEffectPool.Count > 0)
         {
-            GameObject effect = Instantiate(teleportEffectPrefab, position, Quaternion.identity);
-            Destroy(effect, 1f);
+            var effect = teleportEffectPool.Dequeue();
+            effect.transform.position = position;
+            effect.SetActive(true);
+            StartCoroutine(ReturnEffectToPool(effect, teleportEffectPool, 1f));
         }
         else
         {
-            // Create simple particle-like effect
             CreateSimpleTeleportEffect(position);
         }
     }
 
+    IEnumerator ReturnEffectToPool(GameObject effect, Queue<GameObject> pool, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        effect.SetActive(false);
+        pool.Enqueue(effect);
+    }
+
     void CreateSimpleTeleportEffect(Vector3 position)
     {
-        // Create multiple small spheres that expand and fade
-        for (int i = 0; i < 8; i++)
+        const int particleCount = 8;
+        for (int i = 0; i < particleCount; i++)
         {
-            GameObject particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            particle.transform.position = position + Random.insideUnitSphere * 0.5f;
-            particle.transform.localScale = Vector3.one * 0.1f;
+            var particle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var t = particle.transform;
+            t.position = position + Random.insideUnitSphere * 0.5f;
+            t.localScale = Vector3.one * 0.1f;
 
-            Renderer renderer = particle.GetComponent<Renderer>();
-            renderer.material = new Material(Shader.Find("Sprites/Default"));
-            renderer.material.color = Color.blue;
+            var renderer = particle.GetComponent<Renderer>();
+            renderer.material = teleportMaterial;
 
-            // Remove collider
             Destroy(particle.GetComponent<Collider>());
-
-            StartCoroutine(AnimateTeleportParticle(particle));
+            StartCoroutine(AnimateTeleportParticle(particle, t, renderer));
         }
     }
 
-    IEnumerator AnimateTeleportParticle(GameObject particle)
+    IEnumerator AnimateTeleportParticle(GameObject particle, Transform t, Renderer renderer)
     {
-        Vector3 startScale = particle.transform.localScale;
-        Vector3 targetScale = startScale * 3f;
-        Vector3 velocity = Random.insideUnitSphere * 2f;
+        var startScale = t.localScale;
+        var targetScale = startScale * 3f;
+        var velocity = Random.insideUnitSphere * 2f;
         float timer = 0f;
-        float duration = 0.5f;
+        const float duration = 0.5f;
 
-        Renderer renderer = particle.GetComponent<Renderer>();
-        Color originalColor = renderer.material.color;
+        var mat = renderer.material;
+        var originalColor = mat.color;
 
         while (timer < duration)
         {
             timer += Time.deltaTime;
             float normalizedTime = timer / duration;
 
-            // Scale up
-            particle.transform.localScale = Vector3.Lerp(startScale, targetScale, normalizedTime);
+            t.localScale = Vector3.Lerp(startScale, targetScale, normalizedTime);
+            t.position += velocity * Time.deltaTime;
 
-            // Move outward
-            particle.transform.position += velocity * Time.deltaTime;
-
-            // Fade out
-            float alpha = 1f - normalizedTime;
-            renderer.material.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
+            var color = originalColor;
+            color.a = 1f - normalizedTime;
+            mat.SetColor(ColorProperty, color);
 
             yield return null;
         }
@@ -375,61 +465,39 @@ public class TeleportSlashAttack : MonoBehaviour
     {
         if (playerCamera == null) yield break;
 
-        Vector3 originalPosition = playerCamera.transform.localPosition;
+        var originalPos = playerCamera.transform.localPosition;
         float timer = 0f;
 
         while (timer < cameraShakeDuration)
         {
             timer += Time.deltaTime;
-
-            Vector3 randomOffset = Random.insideUnitSphere * cameraShakeIntensity;
-            randomOffset.z = 0; // Don't shake forward/backward
-
-            playerCamera.transform.localPosition = originalPosition + randomOffset;
-
+            var randomOffset = Random.insideUnitSphere * cameraShakeIntensity;
+            randomOffset.z = 0;
+            playerCamera.transform.localPosition = originalPos + randomOffset;
             yield return null;
         }
 
-        playerCamera.transform.localPosition = originalPosition;
+        playerCamera.transform.localPosition = originalPos;
     }
 
     void DealDamageToTarget(GameObject target, float damageAmount)
     {
-        // Prevent hitting the same enemy multiple times
-        if (hitEnemies.Contains(target))
-            return;
+        if (hitEnemies.Contains(target)) return;
 
         hitEnemies.Add(target);
 
-        // Try to find EnemyHP component (you'll add this later)
-        // EnemyHP enemyHP = target.GetComponent<EnemyHP>();
-        // if (enemyHP != null)
-        // {
-        //     enemyHP.TakeDamage(damageAmount);
-        // }
-
-        // For now, just log the damage
-        Debug.Log($"Dealt {damageAmount} damage to {target.name}!");
-
-        // You can also try other common health component names
-        MonoBehaviour[] components = target.GetComponents<MonoBehaviour>();
-        foreach (MonoBehaviour component in components)
+        // Try multiple damage methods efficiently
+        var components = target.GetComponents<MonoBehaviour>();
+        for (int i = 0; i < components.Length; i++)
         {
-            // Look for common health/damage methods
-            var takeDamageMethod = component.GetType().GetMethod("TakeDamage");
-            if (takeDamageMethod != null)
-            {
-                takeDamageMethod.Invoke(component, new object[] { damageAmount });
-                Debug.Log($"Called TakeDamage on {component.GetType().Name}");
-                break;
-            }
+            var component = components[i];
+            var type = component.GetType();
 
-            var damageMethod = component.GetType().GetMethod("Damage");
-            if (damageMethod != null)
+            var method = type.GetMethod("TakeDamage") ?? type.GetMethod("Damage");
+            if (method != null)
             {
-                damageMethod.Invoke(component, new object[] { damageAmount });
-                Debug.Log($"Called Damage on {component.GetType().Name}");
-                break;
+                method.Invoke(component, new object[] { damageAmount });
+                return;
             }
         }
     }
@@ -437,25 +505,25 @@ public class TeleportSlashAttack : MonoBehaviour
     void EndAttack()
     {
         isPerformingAttack = false;
-
-        // Re-enable player movement
-        if (playerController != null)
-            playerController.enabled = true;
-
-        // Start cooldown
+        SetPlayerControlEnabled(true);
         StartCoroutine(UltimateCooldown());
-
-        Debug.Log("Teleport Slash Attack completed!");
     }
 
     IEnumerator UltimateCooldown()
     {
         yield return new WaitForSeconds(cooldownDuration);
         canUseUltimate = true;
-        Debug.Log("Ultimate attack ready!");
     }
 
-    // Visual debugging
+    void PlaySFX(AudioClip clip)
+    {
+        if (audioSource != null && clip != null)
+        {
+            audioSource.PlayOneShot(clip, sfxVolume);
+        }
+    }
+
+    // Visualization
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.red;
@@ -464,30 +532,19 @@ public class TeleportSlashAttack : MonoBehaviour
         if (Application.isPlaying && enemiesInRange.Count > 0)
         {
             Gizmos.color = Color.yellow;
-            foreach (GameObject enemy in enemiesInRange)
+            for (int i = 0; i < enemiesInRange.Count; i++)
             {
-                if (enemy != null)
+                if (enemiesInRange[i] != null)
                 {
-                    Gizmos.DrawLine(transform.position, enemy.transform.position);
+                    Gizmos.DrawLine(transform.position, enemiesInRange[i].transform.position);
                 }
             }
         }
     }
 
-    // Public methods for external access
-    public bool IsAttackOnCooldown()
-    {
-        return !canUseUltimate;
-    }
-
-    public float GetCooldownTimeRemaining()
-    {
-        // You could implement a timer system here if needed
-        return canUseUltimate ? 0f : cooldownDuration;
-    }
-
-    public bool IsPerformingAttack()
-    {
-        return isPerformingAttack;
-    }
+    // Public API
+    public bool IsAttackOnCooldown() => !canUseUltimate;
+    public bool IsPerformingAttack() => isPerformingAttack;
+    public float GetCooldownTimeRemaining() => canUseUltimate ? 0f : Mathf.Max(0f, cooldownDuration - (Time.time - cooldownStartTime));
+    public float GetCooldownPercentage() => canUseUltimate ? 0f : (Time.time - cooldownStartTime) / cooldownDuration;
 }

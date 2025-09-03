@@ -3183,8 +3183,13 @@ MonoBehaviour:
   slashEffectPrefab: {fileID: 7647375919561907788, guid: 035ce8c9cfc34104991ce416daf8aebe, type: 3}
   teleportEffectPrefab: {fileID: 0}
   slashEffectDuration: 0.5
-  playerInvisibleMaterial: {fileID: 0}
   invisibilityFlashDuration: 0.05
+  audioSource: {fileID: 0}
+  teleportSFX: {fileID: 8300000, guid: 0a8167ee24c29864b99e26130a86c9e4, type: 3}
+  slashSFX: {fileID: 8300000, guid: cd50e946cdcac544c9db5779d45cbb48, type: 3}
+  ultimateStartSFX: {fileID: 0}
+  ultimateEndSFX: {fileID: 0}
+  sfxVolume: 0.583
   enableCameraShake: 1
   cameraShakeIntensity: 0.5
   cameraShakeDuration: 0.1
@@ -3283,7 +3288,7 @@ MonoBehaviour:
   teleportColor2: {r: 1, g: 1, b: 1, a: 1}
   teleportFlashDuration: 0.15
   enableCameraShake: 1
-  earthquakeIntensity: 1.2
+  earthquakeIntensity: 622.1
   earthquakeDuration: 0.25
   verticalShakeMultiplier: 0.6
   horizontalShakeMultiplier: 1.4
