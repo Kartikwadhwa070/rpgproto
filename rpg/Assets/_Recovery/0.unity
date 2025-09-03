@@ -238,7 +238,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!108 &157207113
 Light:
   m_ObjectHideFlags: 0
@@ -727,7 +727,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &432432460
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1266,11 +1266,11 @@ Transform:
   m_GameObject: {fileID: 1329570454}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: 0.000000007450581, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0.719}
+  m_LocalPosition: {x: 0.5843239, y: 1.26, z: 12.069773}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1887218736}
+  m_Father: {fileID: 1823688467}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1398296772 stripped
 GameObject:
@@ -2632,10 +2632,11 @@ Transform:
   m_GameObject: {fileID: 1823688464}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 9, y: 9, z: 9}
+  m_LocalPosition: {x: -0.5843239, y: -1.26, z: -11.417772}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1329570455}
   m_Father: {fileID: 1486320856}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1823688468
@@ -3041,7 +3042,6 @@ Transform:
   m_Children:
   - {fileID: 1486320856}
   - {fileID: 1578165610}
-  - {fileID: 1329570455}
   - {fileID: 1398296773}
   - {fileID: 727941679}
   - {fileID: 1736496336}
@@ -3293,7 +3293,7 @@ MonoBehaviour:
     m_Bits: 8
   enemyTag: Enemy
   attackRange: 2
-  attackAngle: 130.3
+  attackAngle: 60
   baseDamage: 10
   launchForce: 15
   launchUpwardForce: 10
